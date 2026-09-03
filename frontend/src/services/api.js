@@ -43,6 +43,7 @@ export const recordFollowUp = (id, notes = '') => api.post(`/claims/${id}/follow
 export const getAlerts = () => api.get('/alerts');
 export const getActiveAlerts = () => api.get('/alerts/active');
 export const resolveAlert = (id) => api.put(`/alerts/${id}/resolve`);
+export const resolveAllAlerts = () => api.put('/alerts/resolve-all');
 
 // Payments Ledger
 export const getPayments = () => api.get('/payments');

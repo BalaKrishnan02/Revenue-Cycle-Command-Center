@@ -47,10 +47,21 @@ public class AlertService {
 
     public Alert resolveAlert(String id) {
         Alert alert = alertRepository.findById(id)
+                .or(() -> alertRepository.findAll().stream().filter(a -> id.equalsIgnoreCase(a.getAlertId())).findFirst())
                 .orElseThrow(() -> new IllegalArgumentException("Alert not found with id: " + id));
         alert.setResolved(true);
         Alert updated = alertRepository.save(alert);
         liveUpdateService.broadcastUpdate("ALERT_RESOLVED", updated);
         return updated;
+    }
+
+    public int resolveAllAlerts() {
+        List<Alert> activeAlerts = alertRepository.findByResolvedFalseOrderByCreatedAtDesc();
+        for (Alert a : activeAlerts) {
+            a.setResolved(true);
+        }
+        alertRepository.saveAll(activeAlerts);
+        liveUpdateService.broadcastUpdate("ALERTS_ALL_RESOLVED", null);
+        return activeAlerts.size();
     }
 }

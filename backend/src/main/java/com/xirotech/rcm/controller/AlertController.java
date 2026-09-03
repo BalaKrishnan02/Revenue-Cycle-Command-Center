@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/alerts")
@@ -28,5 +29,11 @@ public class AlertController {
     @PutMapping("/{id}/resolve")
     public ResponseEntity<Alert> resolveAlert(@PathVariable String id) {
         return ResponseEntity.ok(alertService.resolveAlert(id));
+    }
+
+    @PutMapping("/resolve-all")
+    public ResponseEntity<Map<String, Object>> resolveAllAlerts() {
+        int count = alertService.resolveAllAlerts();
+        return ResponseEntity.ok(Map.of("message", "All active alerts marked as read and moved to history", "count", count));
     }
 }
