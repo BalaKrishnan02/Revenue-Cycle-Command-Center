@@ -509,7 +509,7 @@ export default function ArAgingPage() {
         marginBottom: '1.75rem',
         boxShadow: 'var(--shadow-sm)'
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: selectedDate !== 'ALL' ? '1.25rem' : '0', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
               <CalendarDays size={20} color="#2563eb" />
@@ -518,7 +518,7 @@ export default function ArAgingPage() {
               </h2>
             </div>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>
-              Click the calendar or pick a day below to check how much amount was claimed and what remains pending.
+              Select a calendar date to check that day's claimed persons and amounts.
             </p>
           </div>
 
@@ -836,82 +836,6 @@ export default function ArAgingPage() {
             </div>
           </div>
         )}
-
-        {/* Day-by-Day Quick Date Ribbon */}
-        <div>
-          <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
-            Active Submission Days (Click any day to inspect claim amount)
-          </div>
-          <div style={{
-            display: 'flex',
-            gap: '0.65rem',
-            overflowX: 'auto',
-            paddingBottom: '0.4rem'
-          }}>
-            {/* All Dates Chip */}
-            <button
-              type="button"
-              onClick={() => handleDateSelect('ALL')}
-              style={{
-                flexShrink: 0,
-                padding: '0.55rem 0.85rem',
-                borderRadius: '8px',
-                textAlign: 'left',
-                background: selectedDate === 'ALL' ? '#eff6ff' : '#f8fafc',
-                border: selectedDate === 'ALL' ? '2px solid #2563eb' : '1px solid var(--border-color)',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <div style={{ fontWeight: '800', fontSize: '0.8rem', color: selectedDate === 'ALL' ? '#1d4ed8' : 'var(--navy-dark)' }}>
-                All Dates
-              </div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                Full AR Portfolio
-              </div>
-            </button>
-
-            {/* Individual Days */}
-            {dailyStats.map((ds) => {
-              const isSelected = selectedDate === ds.date;
-              return (
-                <button
-                  key={ds.date}
-                  type="button"
-                  onClick={() => handleDateSelect(ds.date)}
-                  style={{
-                    flexShrink: 0,
-                    padding: '0.55rem 0.85rem',
-                    borderRadius: '8px',
-                    textAlign: 'left',
-                    background: isSelected ? '#eff6ff' : '#ffffff',
-                    border: isSelected ? '2px solid #2563eb' : '1px solid var(--border-color)',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    boxShadow: isSelected ? '0 2px 8px rgba(37, 99, 235, 0.15)' : 'none'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.15rem' }}>
-                    <span style={{ fontWeight: '800', fontSize: '0.8rem', color: isSelected ? '#1d4ed8' : 'var(--navy-dark)' }}>
-                      {ds.formattedDate}
-                    </span>
-                    <span style={{ fontSize: '0.65rem', fontWeight: '700', color: '#64748b' }}>
-                      {ds.daysPending}d ago
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.6rem', fontSize: '0.725rem' }}>
-                    <span style={{ color: '#2563eb', fontWeight: '800' }}>
-                      {formatINR(ds.totalClaimAmount)}
-                    </span>
-                    <span style={{ color: 'var(--text-muted)' }}>
-                      {ds.claimCount} claims
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
       </div>
 
       {/* Error Banner */}
