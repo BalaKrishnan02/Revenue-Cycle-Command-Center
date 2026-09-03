@@ -55,7 +55,6 @@ export default function App() {
               <Route path="/" element={<DashboardPage />} />
               <Route path="/create-claim" element={<CreateClaimPage />} />
               <Route path="/claims" element={<ClaimsListPage />} />
-              <Route path="/denied-claims" element={<ClaimsListPage />} />
               <Route path="/claims/:id" element={<ClaimDetailPage />} />
               <Route path="/payments" element={<PaymentsPage />} />
               <Route path="/alerts" element={<AlertCenterPage />} />
