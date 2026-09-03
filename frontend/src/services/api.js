@@ -6,7 +6,8 @@ import {
   saveStoredAlerts,
   calculateDemoMetrics,
   calculateDemoArAgingSummary,
-  getDemoArAgingClaims
+  getDemoArAgingClaims,
+  getDemoDailyStats
 } from './demoFallback';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
@@ -85,21 +86,28 @@ export const getBillingPriorityQueue = () =>
   );
 
 // AR Aging (Accounts Receivable Tracking)
-export const getArAgingSummary = (payer = '') =>
-  safeRequest(
-    () => api.get(`/ar-aging/summary${payer && payer !== 'ALL' ? `?payer=${encodeURIComponent(payer)}` : ''}`),
-    () => calculateDemoArAgingSummary(getStoredClaims(), payer)
-  );
+export const getArAgingSummary = (payer = '', date = '') => {
+  const params = [];
+  if (payer && payer !== 'ALL') params.push(`payer=${encodeURIComponent(payer)}`);
+  if (date && date !== 'ALL') params.push(`date=${encodeURIComponent(date)}`);
+  const query = params.length > 0 ? `?${params.join('&')}` : '';
 
-export const getArAgingClaims = (bucket = '', payer = '') => {
+  return safeRequest(
+    () => api.get(`/ar-aging/summary${query}`),
+    () => calculateDemoArAgingSummary(getStoredClaims(), payer, date)
+  );
+};
+
+export const getArAgingClaims = (bucket = '', payer = '', date = '') => {
   const params = [];
   if (bucket && bucket !== 'ALL') params.push(`bucket=${encodeURIComponent(bucket)}`);
   if (payer && payer !== 'ALL') params.push(`payer=${encodeURIComponent(payer)}`);
+  if (date && date !== 'ALL') params.push(`date=${encodeURIComponent(date)}`);
   const query = params.length > 0 ? `?${params.join('&')}` : '';
 
   return safeRequest(
     () => api.get(`/ar-aging/claims${query}`),
-    () => getDemoArAgingClaims(getStoredClaims(), bucket, payer)
+    () => getDemoArAgingClaims(getStoredClaims(), bucket, payer, date)
   );
 };
 
@@ -113,6 +121,12 @@ export const getArAgingPayers = () =>
       { payerName: 'HealthPrime', payerType: 'COMMERCIAL', totalOutstanding: 249000, claimCount: 5 },
       { payerName: 'Unity Payer Network', payerType: 'PRIVATE', totalOutstanding: 178000, claimCount: 3 }
     ]
+  );
+
+export const getArAgingDailyStats = (payer = '') =>
+  safeRequest(
+    () => api.get(`/ar-aging/daily-stats${payer && payer !== 'ALL' ? `?payer=${encodeURIComponent(payer)}` : ''}`),
+    () => getDemoDailyStats(getStoredClaims(), payer)
   );
 
 export const recordArFollowUp = async (id, followUpData = {}) => {

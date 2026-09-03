@@ -461,7 +461,16 @@ export function calculateDemoMetrics(claims) {
   };
 }
 
-export function calculateDemoArAgingSummary(claims, payer = '') {
+export function getDemoClaimDateString(c) {
+  const dateStr = c.claimSubmittedDate || c.createdAt;
+  if (dateStr) {
+    return dateStr.split('T')[0];
+  }
+  const days = c.daysPending || 1;
+  return new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
+}
+
+export function calculateDemoArAgingSummary(claims, payer = '', date = '') {
   let activeClaims = claims.filter(
     (c) => c.paymentStatus !== 'PAID' && (c.pendingAmount > 0 || !c.agingBucket?.includes('CLOSED'))
   );
@@ -469,6 +478,12 @@ export function calculateDemoArAgingSummary(claims, payer = '') {
   if (payer && payer !== 'ALL') {
     activeClaims = activeClaims.filter(
       (c) => c.payerName?.toLowerCase() === payer.toLowerCase()
+    );
+  }
+
+  if (date && date !== 'ALL') {
+    activeClaims = activeClaims.filter(
+      (c) => getDemoClaimDateString(c) === date
     );
   }
 
@@ -520,7 +535,7 @@ export function calculateDemoArAgingSummary(claims, payer = '') {
   };
 }
 
-export function getDemoArAgingClaims(claims, bucket = '', payer = '') {
+export function getDemoArAgingClaims(claims, bucket = '', payer = '', date = '') {
   let active = claims.filter(
     (c) => c.paymentStatus !== 'PAID' && (c.pendingAmount > 0 || !c.agingBucket?.includes('CLOSED'))
   );
@@ -528,6 +543,12 @@ export function getDemoArAgingClaims(claims, bucket = '', payer = '') {
   if (payer && payer !== 'ALL') {
     active = active.filter(
       (c) => c.payerName?.toLowerCase() === payer.toLowerCase()
+    );
+  }
+
+  if (date && date !== 'ALL') {
+    active = active.filter(
+      (c) => getDemoClaimDateString(c) === date
     );
   }
 
@@ -547,5 +568,53 @@ export function getDemoArAgingClaims(claims, bucket = '', payer = '') {
     if (daysDiff !== 0) return daysDiff;
     return (b.pendingAmount || 0) - (a.pendingAmount || 0);
   });
+}
+
+export function getDemoDailyStats(claims, payer = '') {
+  let active = claims.filter(
+    (c) => c.paymentStatus !== 'PAID' && (c.pendingAmount > 0 || !c.agingBucket?.includes('CLOSED'))
+  );
+
+  if (payer && payer !== 'ALL') {
+    active = active.filter(
+      (c) => c.payerName?.toLowerCase() === payer.toLowerCase()
+    );
+  }
+
+  const byDate = {};
+  for (const c of active) {
+    const dateStr = getDemoClaimDateString(c);
+    if (!byDate[dateStr]) byDate[dateStr] = [];
+    byDate[dateStr].push(c);
+  }
+
+  const result = [];
+  for (const [dateStr, dayClaims] of Object.entries(byDate)) {
+    const totalClaimAmount = dayClaims.reduce((acc, c) => acc + (c.totalBillAmount || c.claimAmount || 0), 0);
+    const totalPaidAmount = dayClaims.reduce((acc, c) => acc + (c.paidAmount || 0), 0);
+    const totalPendingAmount = dayClaims.reduce((acc, c) => acc + (c.pendingAmount || 0), 0);
+    const avgDays = Math.round(dayClaims.reduce((acc, c) => acc + (c.daysPending || 1), 0) / dayClaims.length);
+
+    let formattedDisplay = dateStr;
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        formattedDisplay = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      }
+    } catch (e) {}
+
+    result.push({
+      date: dateStr,
+      formattedDate: formattedDisplay,
+      daysPending: avgDays,
+      claimCount: dayClaims.length,
+      totalClaimAmount,
+      totalPaidAmount,
+      totalPendingAmount
+    });
+  }
+
+  return result.sort((a, b) => b.date.localeCompare(a.date));
 }
 

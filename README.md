@@ -287,6 +287,18 @@ You can verify the end-to-end cloud pipeline using these test cases:
 3. **Partial Payment**: Record `₹60,000` ➔ Paid `₹80,000`, Pending `₹20,000` (Priority auto-reduces to `MEDIUM`).
 4. **Final Settlement**: Settle final `₹20,000` ➔ Pending `₹0`, Status `PAID` ➔ Disappears from priority queue!
 
+### Test Case C: Day-by-Day Calendar & Claim Amount Explorer
+1. Open **AR Aging** (`/ar-aging`).
+2. In the **Day-by-Day Claim Calendar & Amount Explorer**:
+   * Click any active submission day (e.g. **`03 Sep 2026`** or pick date via calendar picker).
+   * Notice the **Day Inspection Report** appears immediately displaying:
+     * **Total Claim Amount Billed on that day** (e.g. `₹1,53,000`)
+     * **Amount Paid** (`₹0`)
+     * **Amount Pending (AR)** (`₹1,53,000`)
+     * **Claims Count** (`4 Claims`)
+   * Notice the table below dynamically displays all claims submitted on that specific day with exact submission dates.
+3. Click **"Clear Date (All Days)"** ➔ Hospital-wide portfolio is fully restored.
+
 ---
 
 ## 11. Core REST APIs
@@ -294,8 +306,10 @@ You can verify the end-to-end cloud pipeline using these test cases:
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `GET` | `/api/health` | Healthcheck returning status UP and MongoDB Atlas confirmation |
-| `GET` | `/api/ar-aging/summary` | AR Aging KPIs (Total Outstanding, Avg/Oldest Days, 4-bucket breakdown) |
-| `GET` | `/api/ar-aging/claims` | List AR claims sorted by daysPending DESC, supports `?bucket=90+` |
+| `GET` | `/api/ar-aging/summary` | AR Aging KPIs (Total Outstanding, Avg/Oldest Days, 4-bucket breakdown). Supports `?payer=...&date=YYYY-MM-DD` |
+| `GET` | `/api/ar-aging/claims` | List AR claims sorted by daysPending DESC. Supports `?bucket=...&payer=...&date=YYYY-MM-DD` |
+| `GET` | `/api/ar-aging/payers` | Active insurance payers list with outstanding balances and claim counts |
+| `GET` | `/api/ar-aging/daily-stats` | Day-by-day statistics of submitted claims, billed amounts, and pending balances. Supports `?payer=...` |
 | `POST` | `/api/ar-aging/claims/{id}/follow-up` | Record billing follow-up notes, status, and next schedule |
 | `GET` | `/api/dashboard/metrics` | Dynamic KPIs (Total Claims, Total Outstanding, High-Priority Due, Revenue) |
 | `GET` | `/api/billing-priority` | Real-time queue sorted by `billingPriorityScore DESC`, then `pendingAmount DESC` |

@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   DollarSign,
   Calendar,
+  CalendarDays,
   PhoneCall,
   CreditCard,
   Eye,
@@ -35,6 +36,7 @@ import {
   getArAgingSummary,
   getArAgingClaims,
   getArAgingPayers,
+  getArAgingDailyStats,
   recordArFollowUp,
   recordPartialPayment,
   payClaim
@@ -45,7 +47,9 @@ export default function ArAgingPage() {
   const [claims, setClaims] = useState([]);
   const [selectedBucket, setSelectedBucket] = useState('ALL');
   const [selectedPayer, setSelectedPayer] = useState('ALL');
+  const [selectedDate, setSelectedDate] = useState('ALL');
   const [payersList, setPayersList] = useState([]);
+  const [dailyStats, setDailyStats] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -65,17 +69,19 @@ export default function ArAgingPage() {
   // Payment Form
   const [paymentAmount, setPaymentAmount] = useState('');
 
-  const fetchData = async (bucket = selectedBucket, payer = selectedPayer) => {
+  const fetchData = async (bucket = selectedBucket, payer = selectedPayer, date = selectedDate) => {
     try {
       setError(null);
-      const [sumRes, claimsRes, payersRes] = await Promise.all([
-        getArAgingSummary(payer),
-        getArAgingClaims(bucket, payer),
-        getArAgingPayers()
+      const [sumRes, claimsRes, payersRes, dailyRes] = await Promise.all([
+        getArAgingSummary(payer, date),
+        getArAgingClaims(bucket, payer, date),
+        getArAgingPayers(),
+        getArAgingDailyStats(payer)
       ]);
       setSummary(sumRes.data);
       setClaims(claimsRes.data);
       if (payersRes?.data) setPayersList(payersRes.data);
+      if (dailyRes?.data) setDailyStats(dailyRes.data);
     } catch (err) {
       console.error('Error loading AR Aging data:', err);
       setError('Unable to load AR Aging data. Please retry.');
@@ -86,28 +92,35 @@ export default function ArAgingPage() {
   };
 
   useEffect(() => {
-    fetchData(selectedBucket, selectedPayer);
-    const interval = setInterval(() => fetchData(selectedBucket, selectedPayer), 4000);
+    fetchData(selectedBucket, selectedPayer, selectedDate);
+    const interval = setInterval(() => fetchData(selectedBucket, selectedPayer, selectedDate), 4000);
     return () => clearInterval(interval);
-  }, [selectedBucket, selectedPayer]);
+  }, [selectedBucket, selectedPayer, selectedDate]);
 
   const handleBucketSelect = (bucketKey) => {
     const nextBucket = selectedBucket === bucketKey ? 'ALL' : bucketKey;
     setSelectedBucket(nextBucket);
     setLoading(true);
-    fetchData(nextBucket, selectedPayer);
+    fetchData(nextBucket, selectedPayer, selectedDate);
   };
 
   const handlePayerSelect = (payerName) => {
     const nextPayer = selectedPayer === payerName ? 'ALL' : payerName;
     setSelectedPayer(nextPayer);
     setLoading(true);
-    fetchData(selectedBucket, nextPayer);
+    fetchData(selectedBucket, nextPayer, selectedDate);
+  };
+
+  const handleDateSelect = (dateStr) => {
+    const nextDate = selectedDate === dateStr ? 'ALL' : dateStr;
+    setSelectedDate(nextDate);
+    setLoading(true);
+    fetchData(selectedBucket, selectedPayer, nextDate);
   };
 
   const handleRefresh = () => {
     setIsRefreshing(true);
-    fetchData(selectedBucket, selectedPayer);
+    fetchData(selectedBucket, selectedPayer, selectedDate);
   };
 
   // Open Follow-up Modal
@@ -158,7 +171,7 @@ export default function ArAgingPage() {
       setFeedback({ type: 'success', message: `Follow-up logged for ${selectedClaim.claimId}.` });
       setTimeout(() => {
         closeModal();
-        fetchData(selectedBucket, selectedPayer);
+        fetchData(selectedBucket, selectedPayer, selectedDate);
       }, 1000);
     } catch (err) {
       setFeedback({ type: 'error', message: 'Failed to record follow-up. Please try again.' });
@@ -198,7 +211,7 @@ export default function ArAgingPage() {
 
       setTimeout(() => {
         closeModal();
-        fetchData(selectedBucket, selectedPayer);
+        fetchData(selectedBucket, selectedPayer, selectedDate);
       }, 1200);
     } catch (err) {
       setFeedback({ type: 'error', message: 'Failed to process payment. Please try again.' });
@@ -215,6 +228,33 @@ export default function ArAgingPage() {
     return `₹${Math.round(amt).toLocaleString()}`;
   };
 
+  // Format Date for Display
+  const formatDisplayDate = (dateStr) => {
+    if (!dateStr || dateStr === 'ALL') return 'All Dates';
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      }
+    } catch (e) {}
+    return dateStr;
+  };
+
+  // Get Claim Display Date
+  const getClaimDisplayDate = (claim) => {
+    const raw = claim.claimSubmittedDate || claim.createdAt;
+    if (raw) {
+      try {
+        const d = new Date(raw);
+        return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      } catch (e) {}
+    }
+    const days = claim.daysPending || 1;
+    const d = new Date(Date.now() - days * 86400000);
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
   // Filtered Claims
   const filteredClaims = claims.filter((c) => {
     if (!searchTerm) return true;
@@ -225,6 +265,18 @@ export default function ArAgingPage() {
       c.patientName?.toLowerCase().includes(term)
     );
   });
+
+  // Selected Day Calculations
+  const activeDayStat = dailyStats.find((s) => s.date === selectedDate);
+  const selectedDayTotalClaimed = activeDayStat
+    ? activeDayStat.totalClaimAmount
+    : claims.reduce((acc, c) => acc + (c.totalBillAmount || c.claimAmount || 0), 0);
+  const selectedDayTotalPending = activeDayStat
+    ? activeDayStat.totalPendingAmount
+    : summary?.totalOutstanding || 0;
+  const selectedDayTotalPaid = activeDayStat
+    ? activeDayStat.totalPaidAmount
+    : Math.max(0, selectedDayTotalClaimed - selectedDayTotalPending);
 
   // Chart Data Preparation
   const chartData = [
@@ -313,13 +365,13 @@ export default function ArAgingPage() {
         </div>
       </div>
 
-      {/* 2. Dedicated Insurance Payer Selector (Pills / Cards) */}
+      {/* 2. Dedicated Insurance Payer Selector */}
       <div style={{
         backgroundColor: '#ffffff',
         border: '1px solid var(--border-color)',
         borderRadius: 'var(--radius-lg)',
         padding: '1.25rem 1.5rem',
-        marginBottom: '1.75rem',
+        marginBottom: '1.5rem',
         boxShadow: 'var(--shadow-sm)'
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -446,6 +498,204 @@ export default function ArAgingPage() {
         )}
       </div>
 
+      {/* 3. Day-by-Day Claim Calendar & Amount Explorer */}
+      <div style={{
+        backgroundColor: '#ffffff',
+        border: '1px solid var(--border-color)',
+        borderRadius: 'var(--radius-lg)',
+        padding: '1.25rem 1.5rem',
+        marginBottom: '1.75rem',
+        boxShadow: 'var(--shadow-sm)'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
+              <CalendarDays size={20} color="#2563eb" />
+              <h2 style={{ fontSize: '1.05rem', fontWeight: '800', color: 'var(--navy-dark)', margin: 0 }}>
+                Day-by-Day Claim Calendar & Amount Explorer
+              </h2>
+            </div>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>
+              Click the calendar or pick a day below to check how much amount was claimed and what remains pending.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+            {/* Interactive Native Date Picker */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <label style={{ fontSize: '0.775rem', fontWeight: '700', color: '#475569' }}>
+                Select Calendar Date:
+              </label>
+              <input
+                type="date"
+                value={selectedDate === 'ALL' ? '' : selectedDate}
+                onChange={(e) => handleDateSelect(e.target.value || 'ALL')}
+                className="form-control"
+                style={{ fontSize: '0.825rem', padding: '0.35rem 0.65rem', width: '150px', cursor: 'pointer' }}
+              />
+            </div>
+
+            {selectedDate !== 'ALL' && (
+              <button
+                type="button"
+                onClick={() => handleDateSelect('ALL')}
+                className="btn btn-secondary btn-sm"
+                style={{ fontSize: '0.75rem', gap: '0.3rem', padding: '0.35rem 0.65rem' }}
+              >
+                <X size={13} /> Clear Date (All Days)
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Selected Day Amount Inspection Banner */}
+        {selectedDate !== 'ALL' && (
+          <div style={{
+            background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+            color: '#ffffff',
+            borderRadius: 'var(--radius-md)',
+            padding: '1rem 1.25rem',
+            marginBottom: '1rem',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '1rem',
+            boxShadow: 'var(--shadow-md)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+              <div style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '10px',
+                background: 'rgba(59, 130, 246, 0.2)',
+                color: '#60a5fa',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: '800'
+              }}>
+                <Calendar size={22} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  DAY INSPECTION REPORT
+                </div>
+                <div style={{ fontSize: '1.25rem', fontWeight: '800', letterSpacing: '-0.01em' }}>
+                  {formatDisplayDate(selectedDate)}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1.75rem', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>TOTAL CLAIM AMOUNT BILLED</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#60a5fa' }}>
+                  {formatINR(selectedDayTotalClaimed)}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>AMOUNT PAID</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#34d399' }}>
+                  {formatINR(selectedDayTotalPaid)}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>AMOUNT PENDING (AR)</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#f87171' }}>
+                  {formatINR(selectedDayTotalPending)}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>CLAIMS COUNT</div>
+                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#ffffff' }}>
+                  {filteredClaims.length} Claims
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Day-by-Day Quick Date Ribbon */}
+        <div>
+          <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
+            Active Submission Days (Click any day to inspect claim amount)
+          </div>
+          <div style={{
+            display: 'flex',
+            gap: '0.65rem',
+            overflowX: 'auto',
+            paddingBottom: '0.4rem'
+          }}>
+            {/* All Dates Chip */}
+            <button
+              type="button"
+              onClick={() => handleDateSelect('ALL')}
+              style={{
+                flexShrink: 0,
+                padding: '0.55rem 0.85rem',
+                borderRadius: '8px',
+                textAlign: 'left',
+                background: selectedDate === 'ALL' ? '#eff6ff' : '#f8fafc',
+                border: selectedDate === 'ALL' ? '2px solid #2563eb' : '1px solid var(--border-color)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <div style={{ fontWeight: '800', fontSize: '0.8rem', color: selectedDate === 'ALL' ? '#1d4ed8' : 'var(--navy-dark)' }}>
+                All Dates
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                Full AR Portfolio
+              </div>
+            </button>
+
+            {/* Individual Days */}
+            {dailyStats.map((ds) => {
+              const isSelected = selectedDate === ds.date;
+              return (
+                <button
+                  key={ds.date}
+                  type="button"
+                  onClick={() => handleDateSelect(ds.date)}
+                  style={{
+                    flexShrink: 0,
+                    padding: '0.55rem 0.85rem',
+                    borderRadius: '8px',
+                    textAlign: 'left',
+                    background: isSelected ? '#eff6ff' : '#ffffff',
+                    border: isSelected ? '2px solid #2563eb' : '1px solid var(--border-color)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    boxShadow: isSelected ? '0 2px 8px rgba(37, 99, 235, 0.15)' : 'none'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.15rem' }}>
+                    <span style={{ fontWeight: '800', fontSize: '0.8rem', color: isSelected ? '#1d4ed8' : 'var(--navy-dark)' }}>
+                      {ds.formattedDate}
+                    </span>
+                    <span style={{ fontSize: '0.65rem', fontWeight: '700', color: '#64748b' }}>
+                      {ds.daysPending}d ago
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.6rem', fontSize: '0.725rem' }}>
+                    <span style={{ color: '#2563eb', fontWeight: '800' }}>
+                      {formatINR(ds.totalClaimAmount)}
+                    </span>
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      {ds.claimCount} claims
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
       {/* Error Banner */}
       {error && (
         <div style={{
@@ -463,13 +713,13 @@ export default function ArAgingPage() {
             <AlertTriangle size={18} />
             <span style={{ fontSize: '0.875rem', fontWeight: '600' }}>{error}</span>
           </div>
-          <button onClick={() => fetchData(selectedBucket, selectedPayer)} className="btn btn-danger btn-sm">
+          <button onClick={() => fetchData(selectedBucket, selectedPayer, selectedDate)} className="btn btn-danger btn-sm">
             Retry
           </button>
         </div>
       )}
 
-      {/* 3. Top 4 KPI Cards */}
+      {/* 4. Top 4 KPI Cards */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
@@ -490,7 +740,9 @@ export default function ArAgingPage() {
             {loading ? '...' : formatINR(summary?.totalOutstanding || 0)}
           </div>
           <div style={{ fontSize: '0.775rem', color: 'var(--text-muted)' }}>
-            {selectedPayer !== 'ALL' ? `Unpaid by ${selectedPayer}` : 'Total unpaid insurance revenue'}
+            {selectedDate !== 'ALL'
+              ? `Unpaid for ${formatDisplayDate(selectedDate)}`
+              : (selectedPayer !== 'ALL' ? `Unpaid by ${selectedPayer}` : 'Total unpaid insurance revenue')}
           </div>
         </div>
 
@@ -549,7 +801,7 @@ export default function ArAgingPage() {
         </div>
       </div>
 
-      {/* 4. Four Aging Bucket Cards (Interactive / Filterable) */}
+      {/* 5. Four Aging Bucket Cards */}
       <div style={{ marginBottom: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
           <h2 style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--navy-dark)' }}>
@@ -717,13 +969,14 @@ export default function ArAgingPage() {
         </div>
       </div>
 
-      {/* 5. Aging Bar Chart */}
+      {/* 6. Aging Bar Chart */}
       <div className="card" style={{ marginBottom: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
           <div>
             <h2 className="card-title" style={{ marginBottom: '0.25rem' }}>
               <ArrowUpDown size={18} color="#2563eb" /> Outstanding Revenue by Aging Bucket
-              {selectedPayer !== 'ALL' && <span style={{ color: '#2563eb', fontSize: '0.9rem' }}> — {selectedPayer}</span>}
+              {selectedDate !== 'ALL' && <span style={{ color: '#2563eb', fontSize: '0.9rem' }}> — {formatDisplayDate(selectedDate)}</span>}
+              {selectedPayer !== 'ALL' && <span style={{ color: '#059669', fontSize: '0.9rem' }}> ({selectedPayer})</span>}
             </h2>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
               Unpaid rupee value categorized by duration outstanding
@@ -763,7 +1016,7 @@ export default function ArAgingPage() {
         </div>
       </div>
 
-      {/* 6. Claims Table */}
+      {/* 7. Claims Table */}
       <div className="card">
         {/* Table Controls */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
@@ -773,13 +1026,14 @@ export default function ArAgingPage() {
               Aging Claims{' '}
               {selectedBucket !== 'ALL' && <span style={{ color: '#2563eb' }}>({selectedBucket} Bucket)</span>}
               {selectedPayer !== 'ALL' && <span style={{ color: '#059669' }}> • {selectedPayer}</span>}
+              {selectedDate !== 'ALL' && <span style={{ color: '#7c3aed' }}> • {formatDisplayDate(selectedDate)}</span>}
             </h2>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
               Sorted by days pending (oldest first) then unpaid amount
             </p>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
             <div style={{ position: 'relative' }}>
               <Search size={16} color="#64748b" style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)' }} />
               <input
@@ -788,7 +1042,7 @@ export default function ArAgingPage() {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="form-control"
-                style={{ paddingLeft: '2.25rem', width: '220px', fontSize: '0.85rem' }}
+                style={{ paddingLeft: '2.25rem', width: '200px', fontSize: '0.85rem' }}
               />
             </div>
 
@@ -797,7 +1051,7 @@ export default function ArAgingPage() {
               value={selectedPayer}
               onChange={(e) => handlePayerSelect(e.target.value)}
               className="form-control"
-              style={{ fontSize: '0.85rem', minWidth: '220px', borderColor: selectedPayer !== 'ALL' ? '#2563eb' : undefined }}
+              style={{ fontSize: '0.85rem', width: '190px', borderColor: selectedPayer !== 'ALL' ? '#2563eb' : undefined }}
             >
               <option value="ALL">All Insurance Payers</option>
               {payersList.map((p) => (
@@ -807,12 +1061,27 @@ export default function ArAgingPage() {
               ))}
             </select>
 
+            {/* Calendar Date Dropdown Filter */}
+            <select
+              value={selectedDate}
+              onChange={(e) => handleDateSelect(e.target.value)}
+              className="form-control"
+              style={{ fontSize: '0.85rem', width: '170px', borderColor: selectedDate !== 'ALL' ? '#7c3aed' : undefined }}
+            >
+              <option value="ALL">All Calendar Dates</option>
+              {dailyStats.map((ds) => (
+                <option key={ds.date} value={ds.date}>
+                  {ds.formattedDate} ({ds.claimCount} claims)
+                </option>
+              ))}
+            </select>
+
             {/* Aging Bucket Dropdown */}
             <select
               value={selectedBucket}
               onChange={(e) => handleBucketSelect(e.target.value)}
               className="form-control"
-              style={{ fontSize: '0.85rem', width: '150px' }}
+              style={{ fontSize: '0.85rem', width: '135px' }}
             >
               <option value="ALL">All Buckets</option>
               <option value="0-30">0–30 Days</option>
@@ -829,7 +1098,7 @@ export default function ArAgingPage() {
             <thead>
               <tr>
                 <th>Aging</th>
-                <th>Claim ID</th>
+                <th>Claim ID & Date</th>
                 <th>Payer Organization</th>
                 <th>Total Bill</th>
                 <th>Paid</th>
@@ -850,11 +1119,11 @@ export default function ArAgingPage() {
                         No outstanding claims in this view.
                       </div>
                       <div style={{ fontSize: '0.8rem' }}>
-                        No unsettled bills match the selected payer ({selectedPayer}) and aging bucket ({selectedBucket}).
+                        No unsettled bills match the selected date ({formatDisplayDate(selectedDate)}), payer ({selectedPayer}), or bucket ({selectedBucket}).
                       </div>
-                      {(selectedPayer !== 'ALL' || selectedBucket !== 'ALL') && (
+                      {(selectedPayer !== 'ALL' || selectedBucket !== 'ALL' || selectedDate !== 'ALL') && (
                         <button
-                          onClick={() => { setSelectedPayer('ALL'); setSelectedBucket('ALL'); }}
+                          onClick={() => { setSelectedPayer('ALL'); setSelectedBucket('ALL'); setSelectedDate('ALL'); }}
                           className="btn btn-secondary btn-sm"
                           style={{ marginTop: '0.5rem' }}
                         >
@@ -884,7 +1153,7 @@ export default function ArAgingPage() {
                         </span>
                       </td>
 
-                      {/* Claim ID */}
+                      {/* Claim ID & Submission Date */}
                       <td>
                         <Link
                           to={`/claims/${claim.claimId || claim.id}`}
@@ -894,6 +1163,9 @@ export default function ArAgingPage() {
                         </Link>
                         <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
                           {claim.patientName}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.1rem' }}>
+                          <Calendar size={11} /> {getClaimDisplayDate(claim)}
                         </div>
                       </td>
 

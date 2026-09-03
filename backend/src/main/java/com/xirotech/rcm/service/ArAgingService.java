@@ -86,11 +86,19 @@ public class ArAgingService {
         }
     }
 
+    public String getClaimDateString(Claim c) {
+        Instant date = c.getClaimSubmittedDate() != null ? c.getClaimSubmittedDate() : c.getCreatedAt();
+        if (date != null) {
+            return java.time.format.DateTimeFormatter.ISO_LOCAL_DATE.withZone(java.time.ZoneOffset.UTC).format(date);
+        }
+        return java.time.LocalDate.now().minusDays(Math.max(1, c.getDaysPending())).toString();
+    }
+
     /**
      * Compute aggregate AR Aging Summary KPIs and 4-bucket breakdown.
-     * Optionally filtered by insurance payer.
+     * Optionally filtered by insurance payer and submitted date (YYYY-MM-DD).
      */
-    public ArAgingSummaryResponse getArAgingSummary(String payer) {
+    public ArAgingSummaryResponse getArAgingSummary(String payer, String date) {
         List<Claim> allClaims = claimRepository.findAll();
 
         // Refresh calculations in-memory
@@ -103,6 +111,8 @@ public class ArAgingService {
                 .filter(c -> !"PAID/CLOSED".equalsIgnoreCase(c.getAgingBucket()) && c.getPendingAmount() > 0.001)
                 .filter(c -> payer == null || payer.isBlank() || payer.equalsIgnoreCase("ALL") || 
                         (c.getPayerName() != null && c.getPayerName().equalsIgnoreCase(payer.trim())))
+                .filter(c -> date == null || date.isBlank() || date.equalsIgnoreCase("ALL") || 
+                        getClaimDateString(c).equals(date.trim()))
                 .toList();
 
         double totalOutstanding = activeClaims.stream()
@@ -152,15 +162,19 @@ public class ArAgingService {
                 .build();
     }
 
+    public ArAgingSummaryResponse getArAgingSummary(String payer) {
+        return getArAgingSummary(payer, null);
+    }
+
     public ArAgingSummaryResponse getArAgingSummary() {
-        return getArAgingSummary(null);
+        return getArAgingSummary(null, null);
     }
 
     /**
-     * Return list of active AR aging claims, optionally filtered by bucket and insurance payer.
+     * Return list of active AR aging claims, optionally filtered by bucket, insurance payer, and date (YYYY-MM-DD).
      * Sorted by daysPending DESC, then pendingAmount DESC.
      */
-    public List<Claim> getArAgingClaims(String bucket, String payer) {
+    public List<Claim> getArAgingClaims(String bucket, String payer, String date) {
         List<Claim> allClaims = claimRepository.findAll();
 
         for (Claim c : allClaims) {
@@ -172,11 +186,73 @@ public class ArAgingService {
                 .filter(c -> bucket == null || bucket.isBlank() || bucket.equalsIgnoreCase("ALL") || bucket.equalsIgnoreCase(c.getAgingBucket()))
                 .filter(c -> payer == null || payer.isBlank() || payer.equalsIgnoreCase("ALL") || 
                         (c.getPayerName() != null && c.getPayerName().equalsIgnoreCase(payer.trim())))
+                .filter(c -> date == null || date.isBlank() || date.equalsIgnoreCase("ALL") || 
+                        getClaimDateString(c).equals(date.trim()))
                 .sorted(Comparator.comparingInt(Claim::getDaysPending).reversed()
                         .thenComparing(Comparator.comparingDouble(Claim::getPendingAmount).reversed()))
                 .collect(Collectors.toList());
 
         return filtered;
+    }
+
+    public List<Claim> getArAgingClaims(String bucket, String payer) {
+        return getArAgingClaims(bucket, payer, null);
+    }
+
+    public List<Claim> getArAgingClaims(String bucket) {
+        return getArAgingClaims(bucket, null, null);
+    }
+
+    /**
+     * Get day-by-day statistics of submitted claims, billed amounts, and pending balances.
+     */
+    public List<Map<String, Object>> getDailyStats(String payer) {
+        List<Claim> allClaims = claimRepository.findAll();
+        for (Claim c : allClaims) {
+            calculateArAging(c);
+        }
+
+        List<Claim> active = allClaims.stream()
+                .filter(c -> !"PAID/CLOSED".equalsIgnoreCase(c.getAgingBucket()) && c.getPendingAmount() > 0.001)
+                .filter(c -> payer == null || payer.isBlank() || payer.equalsIgnoreCase("ALL") || 
+                        (c.getPayerName() != null && c.getPayerName().equalsIgnoreCase(payer.trim())))
+                .toList();
+
+        Map<String, List<Claim>> byDate = active.stream()
+                .collect(Collectors.groupingBy(this::getClaimDateString));
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        java.time.format.DateTimeFormatter displayFormatter = java.time.format.DateTimeFormatter.ofPattern("dd MMM yyyy");
+
+        for (Map.Entry<String, List<Claim>> entry : byDate.entrySet()) {
+            String dateStr = entry.getKey();
+            List<Claim> dayClaims = entry.getValue();
+
+            double totalClaimAmount = dayClaims.stream().mapToDouble(c -> c.getTotalBillAmount() > 0 ? c.getTotalBillAmount() : c.getClaimAmount()).sum();
+            double totalPaidAmount = dayClaims.stream().mapToDouble(Claim::getPaidAmount).sum();
+            double totalPendingAmount = dayClaims.stream().mapToDouble(Claim::getPendingAmount).sum();
+            int avgDaysPending = (int) Math.round(dayClaims.stream().mapToInt(Claim::getDaysPending).average().orElse(0));
+
+            String formattedDisplay = dateStr;
+            try {
+                java.time.LocalDate parsed = java.time.LocalDate.parse(dateStr);
+                formattedDisplay = parsed.format(displayFormatter);
+            } catch (Exception ignored) {}
+
+            Map<String, Object> dayMap = new LinkedHashMap<>();
+            dayMap.put("date", dateStr);
+            dayMap.put("formattedDate", formattedDisplay);
+            dayMap.put("daysPending", avgDaysPending);
+            dayMap.put("claimCount", dayClaims.size());
+            dayMap.put("totalClaimAmount", totalClaimAmount);
+            dayMap.put("totalPaidAmount", totalPaidAmount);
+            dayMap.put("totalPendingAmount", totalPendingAmount);
+            result.add(dayMap);
+        }
+
+        // Sort descending by date
+        result.sort((a, b) -> ((String) b.get("date")).compareTo((String) a.get("date")));
+        return result;
     }
 
     public List<Claim> getArAgingClaims(String bucket) {
