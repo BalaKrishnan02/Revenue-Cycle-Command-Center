@@ -1,147 +1,217 @@
 # RCM INSIGHT
 ### AI-Powered Real-Time Revenue Cycle Command Center & Smart Billing Priority Queue
 > **"Predict • Prevent • Monitor • Improve"**  
-> Developed for Healthcare Hackathon by **Team XIRO TECH**
+> Developed by **Team XIRO TECH**
 
 ---
 
-## 1. Executive Summary & Problem Statement
-
-Healthcare billing teams manage millions in claims spread across disparate electronic health records (EHRs), payer portals, spreadsheets, and delayed 835/837 EDI reports. Traditional revenue cycle management is **reactive** — hospitals only discover claim rejections weeks after submission when an explanation of benefits (EOB) denial arrives, and billing staff struggle to manually identify which unpaid claims to follow up on first.
-
-**RCM Insight** solves both challenges with two integrated layers:
-1. **Pre-Submission AI Intelligence Layer**: Audits claims *before* payer submission using Random Forest Machine Learning + Rule-Based Explainability to eliminate avoidable denials (unverified eligibility, missing prior authorization, invalid ICD/CPT coding, incomplete clinical documentation).
-2. **Smart Billing Priority Queue (Bill-Amount Driven)**: Automatically ranks unpaid and partially paid hospital bills by financial urgency (**Pending Bill Amount [70%]** + **Pending Duration [30%]**), placing high-value and long-pending balances at the top for follow-up.
-
----
-
-## 2. High-Level Architecture
+## 1. Production Deployment Architecture
 
 ```
-                                  ┌────────────────────────┐
-                                  │   Billing Specialist   │
-                                  │     / RCM Manager      │
-                                  └───────────┬────────────┘
-                                              │
-                                              ▼
-                                 ┌──────────────────────────┐
-                                 │   React.js Dashboard     │
-                                 │  • Smart Priority Queue  │
-                                 │  • AI Denial Risk Meter  │
-                                 │  • Recharts & KPIs       │
-                                 │       Port: 5173         │
-                                 └──────▲────────────┬──────┘
-                                        │            │
-                           REST API /   │            │ Live Polling /
-                           Submissions  │            │ WebSocket Sync
-                                        ▼            ▼
-                                 ┌──────────────────────────┐
-                                 │  Spring Boot 3.x Backend │
-                                 │  • BillingPriorityService│
-                                 │  • ClaimService          │
-                                 │  • PaymentService        │
-                                 │       Port: 8080         │
-                                 └──────┬────────────▲──────┘
-                                        │            │
-                         CRUD & History │            │ /predict
-                                        ▼            ▼
-                         ┌─────────────────┐   ┌──────────────────────────┐
-                         │ MongoDB Database│   │  Python FastAPI Service  │
-                         │   rcm_insight   │   │  (Random Forest ML Model)│
-                         │   Port: 27017   │   │       Port: 8000         │
-                         └─────────────────┘   └──────────────────────────┘
+                                  ┌───────────────────────────┐
+                                  │    Billing Specialist     │
+                                  │      / RCM Leadership     │
+                                  └─────────────┬─────────────┘
+                                                │
+                                                ▼
+                                   ┌─────────────────────────┐
+                                   │    Vercel Frontend      │
+                                   │  React 18 + Vite (SPA)  │
+                                   │ https://rcm-50.vercel.app│
+                                   └────────────┬────────────┘
+                                                │
+                                 HTTPS / REST   │ VITE_API_URL
+                                                ▼
+                                   ┌─────────────────────────┐
+                                   │     Railway Backend     │
+                                   │    Java 17 Spring Boot  │
+                                   │   Port: ${PORT:8080}    │
+                                   └──────┬───────────▲──────┘
+                                          │           │
+                    MONGODB_URI           │           │ ML_SERVICE_URL
+                    Driver Connection     │           │ /predict
+                                          ▼           ▼
+                           ┌─────────────────────┐  ┌─────────────────────────┐
+                           │    MongoDB Atlas    │  │  Python FastAPI ML Svc  │
+                           │   Cloud Database    │  │  (Random Forest Engine) │
+                           │     rcm_insight     │  │       Port: 8000        │
+                           └─────────────────────┘  └─────────────────────────┘
 ```
 
 ---
 
-## 3. Technology Stack
+## 2. Cloud Components & Live URLs
 
-| Layer | Technologies Used | Port |
+| Component | Technology | Hosting Platform | URL / Connection |
+| :--- | :--- | :--- | :--- |
+| **Frontend** | React 18, Vite, Recharts, Lucide Icons | **Vercel** | **[https://rcm-50.vercel.app](https://rcm-50.vercel.app/)** |
+| **Backend** | Java 17, Spring Boot 3.2.3, Spring Data | **Railway** | `https://YOUR-RAILWAY-BACKEND.up.railway.app` |
+| **Database** | MongoDB Cloud Cluster | **MongoDB Atlas** | Database: `rcm_insight` (`${MONGODB_URI}`) |
+| **ML Engine** | Python 3.10+, FastAPI, Scikit-Learn | **Railway / Render** | `${ML_SERVICE_URL}` (Embedded fallback included) |
+
+---
+
+## 3. MongoDB Atlas Cloud Database Setup
+
+Follow these exact steps to prepare your MongoDB Atlas cloud database:
+
+1. **Open MongoDB Atlas**: Log in at [cloud.mongodb.com](https://cloud.mongodb.com).
+2. **Create Project**: Name the project `RCM Insight`.
+3. **Deploy a Free Cluster**: Choose **M0 Free Tier** (AWS or GCP region closest to you).
+4. **Create Database User**:
+   * Navigate to **Security** ➔ **Database Access**.
+   * Add a new database user (e.g. `rcm_admin`).
+   * Generate a secure password and save it safely.
+   * Grant role: `Read and write to any database`.
+5. **Configure Network Access**:
+   * Navigate to **Security** ➔ **Network Access**.
+   * Click **Add IP Address** ➔ Select **Allow Access from Anywhere (`0.0.0.0/0`)** so Railway cloud containers can connect.
+6. **Get Connection String**:
+   * Navigate to **Database** ➔ Click **Connect** on your cluster.
+   * Choose **Drivers** (Driver: `Java`, Version: `4.3 or later`).
+   * Copy the connection string. It will look like:
+     ```
+     mongodb+srv://rcm_admin:<password>@cluster0.xxxxx.mongodb.net/rcm_insight?retryWrites=true&w=majority
+     ```
+   * Replace `<password>` with your database user password and ensure the database name is `rcm_insight`.
+7. **Store in Railway**: Save this complete URI as the `MONGODB_URI` environment variable in Railway. *(Never commit passwords to Git!)*
+
+---
+
+## 4. Railway Backend Deployment Guide
+
+The Spring Boot backend is pre-configured with a multi-stage Docker build and Maven packaging.
+
+### Step 1: Deploy on Railway
+1. Go to [railway.app](https://railway.app) and sign in with GitHub.
+2. Click **New Project** ➔ **Deploy from GitHub repo**.
+3. Select your repository: `BalaKrishnan02/Revenue-Cycle-Command-Center`.
+4. Railway automatically detects the project `Dockerfile` and builds the Java 17 container using `mvn clean package -DskipTests`.
+
+### Step 2: Configure Railway Environment Variables
+In your Railway Service ➔ **Variables**, add the following:
+
+| Variable | Value | Description |
 | :--- | :--- | :--- |
-| **Frontend** | React 18, Vite, JavaScript, React Router v6, Axios, Recharts, Lucide Icons, Custom CSS tokens | `5173` |
-| **Backend** | Java 17+, Spring Boot 3.2.3, Spring Web, Spring Data MongoDB, Bean Validation, WebSocket | `8080` |
-| **AI / Machine Learning** | Python 3.10+, FastAPI, Scikit-Learn (RandomForestClassifier), Pandas, NumPy, Joblib | `8000` |
-| **Database** | MongoDB (`rcm_insight` database, auto-seeded with realistic synthetic claims) | `27017` |
+| `MONGODB_URI` | `mongodb+srv://<user>:<password>@cluster.mongodb.net/rcm_insight?retryWrites=true&w=majority` | MongoDB Atlas Cloud URI |
+| `FRONTEND_URL` | `https://rcm-50.vercel.app` | Allowed CORS Production Origin |
+| `PORT` | `8080` | Assigned automatically by Railway |
+| `ML_SERVICE_URL` | `http://localhost:8000` *(or your deployed ML URL)* | Python AI denial service |
+
+### Step 3: Generate Public Domain & Test Health
+1. In Railway Service ➔ **Settings** ➔ **Networking** ➔ Click **Generate Domain**.
+2. Example generated URL: `https://rcm-insight-backend.up.railway.app`.
+3. Verify the public health endpoint:
+   ```bash
+   curl -i https://YOUR-RAILWAY-URL/api/health
+   ```
+   **Expected Response**:
+   ```json
+   {
+     "status": "UP",
+     "service": "RCM Insight Backend",
+     "database": "MongoDB Atlas"
+   }
+   ```
 
 ---
 
-## 4. Smart Billing Priority Queue Formula
+## 5. Connect Vercel Frontend to Railway Backend
 
-The Smart Priority Queue ranks unpaid claims strictly based on financial and payment factors (**NOT AI denial risk**):
+1. Open your Vercel project dashboard at [vercel.com](https://vercel.com).
+2. Go to **Settings** ➔ **Environment Variables**.
+3. Add / Update:
+   * **Key**: `VITE_API_URL`
+   * **Value**: `https://YOUR-RAILWAY-URL/api` *(replace with your real Railway domain)*
+4. Go to **Deployments** ➔ Click **Redeploy** on the latest build to pick up the new environment variable.
+5. Open **[https://rcm-50.vercel.app](https://rcm-50.vercel.app/)** in your browser. All API requests now route securely to your Railway cloud backend and MongoDB Atlas!
+
+---
+
+## 6. Global CORS Configuration
+
+The backend is configured with strict, production-ready CORS in `CorsConfig.java`:
+* **Allowed Production Origin**: `https://rcm-50.vercel.app` (and `${FRONTEND_URL}`)
+* **Allowed Local Development**: `http://localhost:5173`, `http://localhost:5174`, `http://localhost:3000`
+* **Allowed Methods**: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`
+* **Allowed Headers**: `Content-Type`, `Authorization`, `Accept`, `X-Requested-With`, `Origin`
+* **Credentials**: Enabled (`allowCredentials(true)`)
+* **Preflight Cache**: `maxAge(3600)`
+
+---
+
+## 7. Smart Billing Priority Queue Formula
+
+The Smart Priority Queue prioritizes unpaid hospital claims strictly by financial urgency (**NOT AI denial risk**):
 
 $$\text{Billing Priority Score} = (\text{Amount Score} \times 0.70) + (\text{Pending Days Score} \times 0.30)$$
 
 ### Amount Score (70% Weight)
-- **₹0**: `0`
-- **₹1 – ₹10,000**: `20`
-- **₹10,001 – ₹25,000**: `40`
-- **₹25,001 – ₹50,000**: `60`
-- **₹50,001 – ₹1,00,000**: `80`
-- **Above ₹1,00,000**: `100`
+* **₹0**: `0`
+* **₹1 – ₹10,000**: `20`
+* **₹10,001 – ₹25,000**: `40`
+* **₹25,001 – ₹50,000**: `60`
+* **₹50,001 – ₹1,00,000**: `80`
+* **Above ₹1,00,000**: `100`
 
 ### Pending Days Score (30% Weight)
-- **0–3 days**: `10`
-- **4–7 days**: `25`
-- **8–15 days**: `50`
-- **16–30 days**: `75`
-- **More than 30 days**: `100`
+* **0–3 days**: `10`
+* **4–7 days**: `25`
+* **8–15 days**: `50`
+* **16–30 days**: `75`
+* **More than 30 days**: `100`
 
-### Priority Levels
-- **80 – 100**: `CRITICAL` (Red)
-- **55 – 79**: `HIGH` (Orange)
-- **30 – 54**: `MEDIUM` (Yellow)
-- **0 – 29**: `LOW` (Green)
-
-*Note: Fully paid claims (`paymentStatus == PAID` or `pendingAmount == 0`) automatically disappear from the priority queue.*
+### Dynamic Status & Auto-Removal
+* **`CRITICAL` (80–100)** ➔ **`HIGH` (55–79)** ➔ **`MEDIUM` (30–54)** ➔ **`LOW` (0–29)**.
+* When a partial payment is recorded, the pending balance decreases and the score automatically drops.
+* When the remaining balance is paid in full (`pendingAmount == 0`), status becomes **`PAID`** and the claim **automatically disappears** from the priority queue.
 
 ---
 
-## 5. Demonstration Workflows
+## 8. Verification & Persistence Test Flow (CLM5001)
 
-### 🎯 Feature Demo: Smart Billing Priority Queue & Partial Payments
-1. Open the **Dashboard** (`http://localhost:5173` or `http://localhost:5174`).
-2. Observe the **Total Outstanding** (e.g. ₹4.15L) and **High-Priority Outstanding** (e.g. ₹3.45L) KPI cards.
-3. Inspect the **Smart Billing Priority Queue** table directly below the KPI cards:
-   - **`CLM3001`** (Nova Health, ₹1,00,000 pending, 20 days) ➔ **CRITICAL (Score: 93)** at the very top.
-   - **`CLM3003`** (MediSecure, ₹70,000 pending, 32 days) ➔ **CRITICAL (Score: 86)**.
-   - **`CLM3002`** (CareShield, ₹25,000 pending, 12 days) ➔ **MEDIUM (Score: 43)** ranked lower.
-4. Click **FOLLOW UP** on `CLM3001`:
-   - Modal displays the financial overview.
-   - Enter **₹70,000** under *Record Partial Payment* and click **Record Payment**.
-   - Remaining balance becomes **₹30,000**; priority score automatically recalculates and drops from **CRITICAL (93)** ➔ **HIGH (65)**.
-5. Click **Settle Full Remaining Balance (₹30,000)**:
-   - Claim status transitions to **`PAID`**.
-   - Claim **automatically disappears** from the Smart Billing Priority Queue.
-   - **Total Outstanding** decreases, and **Revenue Collected** increases live on the dashboard.
+You can verify the end-to-end cloud pipeline using this test case:
 
----
-
-### 🎯 Core Demo: Pre-Submission AI Denial Risk Prevention
-1. Navigate to **Create Claim** (`/create-claim`) or click **⚡ Quick Fill: Scenario 1 (CLM2055)**.
-2. Claim with missing prior authorization triggers **84% High Risk** with actionable root cause explanation.
-3. Click **Edit / Correct**, toggle Authorization to `Yes`, and re-run check ➔ Risk drops to **22% Low Risk**.
-4. Submit claim ➔ Status becomes **`ACCEPTED`** ➔ Process payment ➔ Status becomes **`PAID`**.
+1. **Create Claim**:
+   * Claim ID: `CLM5001`, Total Bill: `₹1,00,000`
+2. **Initial Payment**:
+   * Record payment of `₹20,000` ➔ Status: `PARTIALLY_PAID`, Pending: `₹80,000`.
+   * Appears near the top of the **Smart Billing Priority Queue** with **`HIGH` / `CRITICAL`** priority.
+3. **Partial Payment**:
+   * Record payment of `₹60,000` ➔ Paid: `₹80,000`, Pending: `₹20,000`.
+   * Priority automatically reduces to **`MEDIUM`**.
+4. **Final Settlement**:
+   * Settle final `₹20,000` ➔ Pending: `₹0`, Status: `PAID`.
+   * Automatically removed from the priority queue.
+   * Dashboard **Revenue Collected** increases and **Total Outstanding** decreases!
+5. **Persistence Verification**:
+   * Refresh `https://rcm-50.vercel.app` ➔ All data remains persistent from MongoDB Atlas!
 
 ---
 
-## 6. REST API Reference
+## 9. Core REST APIs
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/api/billing-priority` | Returns unpaid claims sorted by `billingPriorityScore DESC`, then `pendingAmount DESC` |
-| `POST` | `/api/claims/{id}/partial-payment` | Records partial payment, reduces pending amount, re-ranks priority score |
-| `POST` | `/api/claims/{id}/follow-up` | Logs billing staff follow-up note in audit timeline |
-| `GET` | `/api/dashboard/metrics` | Returns KPI cards (Total Outstanding, High-Priority Due, Revenue, Denial Rates) |
-| `GET` | `/api/claims` | List all claims |
-| `POST` | `/api/claims` | Create a new claim |
-| `GET` | `/api/claims/{id}` | Inspect claim details |
-| `POST` | `/api/claims/{id}/predict` | Run AI Random Forest denial risk audit |
-| `POST` | `/api/claims/{id}/submit` | Submit claim with automated payer adjudication simulation |
-| `POST` | `/api/claims/{id}/pay` | Settle full balance and mark claim as `PAID` |
+| `GET` | `/api/health` | Healthcheck returning status UP and MongoDB Atlas confirmation |
+| `GET` | `/api/dashboard/metrics` | Dynamic KPIs (Total Claims, Total Outstanding, High-Priority Due, Revenue) |
+| `GET` | `/api/billing-priority` | Real-time queue sorted by `billingPriorityScore DESC`, then `pendingAmount DESC` |
+| `GET` | `/api/claims` | List all claims from MongoDB |
+| `POST` | `/api/claims` | Create a new claim with auto-calculated billing priority |
+| `GET` | `/api/claims/{id}` | Inspect individual claim |
+| `POST` | `/api/claims/{id}/payment` | Record full or partial payment (recalculates priority) |
+| `POST` | `/api/claims/{id}/predict` | Pre-submission AI denial check (Random Forest) |
+| `POST` | `/api/claims/{id}/submit` | Submit claim via simulated EDI 837 network |
+| `POST` | `/api/claims/{id}/accept` | Simulate payer adjudication approval |
+| `POST` | `/api/claims/{id}/deny` | Simulate payer denial with root-cause reason |
+| `POST` | `/api/claims/{id}/resubmit` | Resubmit corrected claim |
+| `GET` | `/api/alerts` | Line-by-line proactive alerts feed |
+| `PUT` | `/api/alerts/{id}/resolve` | Mark single alert as read and move to All History |
+| `PUT` | `/api/alerts/resolve-all` | Bulk mark all active alerts as read |
 
 ---
 
-## 7. Team & Hackathon Credits
-- **Team Name**: XIRO TECH
-- **Project**: RCM INSIGHT
-- **Tagline**: Predict • Prevent • Monitor • Improve
+## 10. Repository & Team
+* **GitHub Repository**: [https://github.com/BalaKrishnan02/Revenue-Cycle-Command-Center](https://github.com/BalaKrishnan02/Revenue-Cycle-Command-Center)
+* **Frontend Production URL**: [https://rcm-50.vercel.app](https://rcm-50.vercel.app/)
+* **Team**: XIRO TECH

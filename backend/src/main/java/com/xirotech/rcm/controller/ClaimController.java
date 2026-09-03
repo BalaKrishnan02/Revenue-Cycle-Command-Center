@@ -98,7 +98,7 @@ public class ClaimController {
         return ResponseEntity.ok(claimService.manualSetPending(id));
     }
 
-    @PostMapping("/api/claims/{id}/pay")
+    @PostMapping({"/api/claims/{id}/pay", "/api/claims/{id}/payment"})
     public ResponseEntity<Payment> payClaim(@PathVariable String id, @RequestBody(required = false) PaymentRequest request) {
         Claim claim = claimService.getClaimById(id);
         return ResponseEntity.ok(paymentService.processPayment(claim.getClaimId(), request != null ? request : new PaymentRequest()));
