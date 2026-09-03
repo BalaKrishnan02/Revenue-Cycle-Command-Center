@@ -51,7 +51,83 @@
 
 ---
 
-## 3. MongoDB Atlas Cloud Database Setup
+## 3. How to Run Locally in the Terminal
+
+You can run the entire RCM Insight system on your local machine using 3 separate terminal tabs (or with the 1-click batch script).
+
+### ⚡ Option A: 1-Click Startup (Windows)
+Double-click or run from the project root:
+```cmd
+start-all.bat
+```
+*(This automatically opens 3 separate terminal windows for Python ML, Spring Boot Backend, and React Frontend).*
+
+---
+
+### 💻 Option B: Step-by-Step Terminal Commands
+
+#### 🔹 Terminal 1: Python ML Service (Port 8000)
+```bash
+# 1. Navigate to ml-service directory
+cd ml-service
+
+# 2. (Optional) Create & activate virtual environment
+python -m venv venv
+# On Windows:
+venv\Scripts\activate
+# On macOS/Linux:
+source venv/bin/activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. (Optional) Train/re-train model & create synthetic dataset
+python train_model.py
+
+# 5. Start the FastAPI microservice
+python -m uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+```
+*API Swagger Docs available at:* `http://localhost:8000/docs`
+
+---
+
+#### 🔹 Terminal 2: Java Spring Boot Backend (Port 8080)
+Ensure MongoDB is running locally (`mongodb://localhost:27017/rcm_insight`) or set `MONGODB_URI` to your MongoDB Atlas string.
+
+```bash
+# 1. Navigate to backend directory
+cd backend
+
+# 2. Run with Maven Wrapper (No global Maven installation required!):
+# On Windows PowerShell:
+.\mvnw.ps1 spring-boot:run
+
+# On Windows Command Prompt (CMD):
+mvnw.cmd spring-boot:run
+
+# If you have global Maven installed:
+mvn spring-boot:run
+```
+*Backend Health Check:* `http://localhost:8080/api/health`
+
+---
+
+#### 🔹 Terminal 3: React.js Frontend (Port 5173)
+```bash
+# 1. Navigate to frontend directory
+cd frontend
+
+# 2. Install dependencies (first time only)
+npm install
+
+# 3. Start Vite development server
+npm run dev
+```
+*Dashboard opens at:* `http://localhost:5173`
+
+---
+
+## 4. MongoDB Atlas Cloud Database Setup
 
 Follow these exact steps to prepare your MongoDB Atlas cloud database:
 
@@ -78,7 +154,7 @@ Follow these exact steps to prepare your MongoDB Atlas cloud database:
 
 ---
 
-## 4. Railway Backend Deployment Guide
+## 5. Railway Backend Deployment Guide
 
 The Spring Boot backend is pre-configured with a multi-stage Docker build and Maven packaging.
 
@@ -116,7 +192,7 @@ In your Railway Service ➔ **Variables**, add the following:
 
 ---
 
-## 5. Connect Vercel Frontend to Railway Backend
+## 6. Connect Vercel Frontend to Railway Backend
 
 1. Open your Vercel project dashboard at [vercel.com](https://vercel.com).
 2. Go to **Settings** ➔ **Environment Variables**.
@@ -128,7 +204,7 @@ In your Railway Service ➔ **Variables**, add the following:
 
 ---
 
-## 6. Global CORS Configuration
+## 7. Global CORS Configuration
 
 The backend is configured with strict, production-ready CORS in `CorsConfig.java`:
 * **Allowed Production Origin**: `https://rcm-50.vercel.app` (and `${FRONTEND_URL}`)
@@ -140,7 +216,7 @@ The backend is configured with strict, production-ready CORS in `CorsConfig.java
 
 ---
 
-## 7. Smart Billing Priority Queue Formula
+## 8. Smart Billing Priority Queue Formula
 
 The Smart Priority Queue prioritizes unpaid hospital claims strictly by financial urgency (**NOT AI denial risk**):
 
@@ -168,7 +244,7 @@ $$\text{Billing Priority Score} = (\text{Amount Score} \times 0.70) + (\text{Pen
 
 ---
 
-## 8. Verification & Persistence Test Flow (CLM5001)
+## 9. Verification & Persistence Test Flow (CLM5001)
 
 You can verify the end-to-end cloud pipeline using this test case:
 
@@ -189,7 +265,7 @@ You can verify the end-to-end cloud pipeline using this test case:
 
 ---
 
-## 9. Core REST APIs
+## 10. Core REST APIs
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -211,7 +287,7 @@ You can verify the end-to-end cloud pipeline using this test case:
 
 ---
 
-## 10. Repository & Team
+## 11. Repository & Team
 * **GitHub Repository**: [https://github.com/BalaKrishnan02/Revenue-Cycle-Command-Center](https://github.com/BalaKrishnan02/Revenue-Cycle-Command-Center)
 * **Frontend Production URL**: [https://rcm-50.vercel.app](https://rcm-50.vercel.app/)
 * **Team**: XIRO TECH
