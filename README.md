@@ -244,38 +244,65 @@ $$\text{Billing Priority Score} = (\text{Amount Score} \times 0.70) + (\text{Pen
 
 ---
 
-## 9. Verification & Persistence Test Flow (CLM5001)
+## 9. Accounts Receivable (AR) Aging Dashboard
 
-You can verify the end-to-end cloud pipeline using this test case:
+The **AR Aging Dashboard** (`/ar-aging`) shows how much insurance money has not yet been received and categorizes unsettled hospital revenue by outstanding duration:
 
-1. **Create Claim**:
-   * Claim ID: `CLM5001`, Total Bill: `₹1,00,000`
-2. **Initial Payment**:
-   * Record payment of `₹20,000` ➔ Status: `PARTIALLY_PAID`, Pending: `₹80,000`.
-   * Appears near the top of the **Smart Billing Priority Queue** with **`HIGH` / `CRITICAL`** priority.
-3. **Partial Payment**:
-   * Record payment of `₹60,000` ➔ Paid: `₹80,000`, Pending: `₹20,000`.
-   * Priority automatically reduces to **`MEDIUM`**.
-4. **Final Settlement**:
-   * Settle final `₹20,000` ➔ Pending: `₹0`, Status: `PAID`.
-   * Automatically removed from the priority queue.
-   * Dashboard **Revenue Collected** increases and **Total Outstanding** decreases!
-5. **Persistence Verification**:
-   * Refresh `https://rcm-50.vercel.app` ➔ All data remains persistent from MongoDB Atlas!
+$$\text{Days Pending} = \text{Current Date} - \text{Claim Submitted Date}$$
+
+### Aging Buckets & Status
+* **`0–30 Days`**: `MONITOR` (Standard reimbursement adjudication cycle)
+* **`31–60 Days`**: `FOLLOW UP` (Initial billing follow-up required)
+* **`61–90 Days`**: `HIGH ATTENTION` (Escalation notice to payer)
+* **`90+ Days`**: `CRITICAL` (High-priority management intervention)
+
+### Strict Operational Rules
+* **No AI Denial Risk**: Buckets depend strictly on financial age and unpaid balance.
+* **Partial Payment Retention**: Partial payments reduce `pendingAmount` but do **not** reset `daysPending` (aging remains calculated from submission).
+* **Automatic Settlement Removal**: Once `pendingAmount == 0` (or status is `PAID`), the claim is marked `PAID/CLOSED` and **disappears from active AR aging**.
+
+### AR Showcase Claims
+* `CLM6001`: Total ₹1,00,000 | Paid ₹20,000 | Pending ₹80,000 | 20 days ➔ **`0–30 Days`** (MONITOR)
+* `CLM6002`: Total ₹90,000 | Paid ₹10,000 | Pending ₹80,000 | 45 days ➔ **`31–60 Days`** (FOLLOW UP)
+* `CLM6003`: Total ₹1,20,000 | Paid ₹20,000 | Pending ₹1,00,000 | 75 days ➔ **`61–90 Days`** (HIGH ATTENTION)
+* `CLM6004`: Total ₹1,50,000 | Paid ₹30,000 | Pending ₹1,20,000 | 110 days ➔ **`90+ Days`** (CRITICAL)
 
 ---
 
-## 10. Core REST APIs
+## 10. Verification & Persistence Test Flow (CLM5001 & CLM6004)
+
+You can verify the end-to-end cloud pipeline using these test cases:
+
+### Test Case A: AR Aging Demo Flow (CLM6004)
+1. Open **AR Aging** (`/ar-aging`) ➔ View Top 4 KPIs & click **`90+ DAYS`** bucket card.
+2. Select **`CLM6004`** (₹1,20,000 pending, 110 days).
+3. Click **Pay** ➔ Record partial payment of **₹70,000**.
+4. Balance drops to **₹50,000** (remains in 90+ bucket; total outstanding drops by ₹70,000).
+5. Click **Settle** ➔ Confirm final **₹50,000** payment.
+6. Status becomes **`PAID`** ➔ Claim **automatically disappears** from active AR aging table!
+
+### Test Case B: Billing Priority Flow (CLM5001)
+1. **Create Claim**: Claim ID `CLM5001`, Total Bill `₹1,00,000`
+2. **Initial Payment**: Record `₹20,000` ➔ Status `PARTIALLY_PAID`, Pending `₹80,000` (High Priority in Priority Queue).
+3. **Partial Payment**: Record `₹60,000` ➔ Paid `₹80,000`, Pending `₹20,000` (Priority auto-reduces to `MEDIUM`).
+4. **Final Settlement**: Settle final `₹20,000` ➔ Pending `₹0`, Status `PAID` ➔ Disappears from priority queue!
+
+---
+
+## 11. Core REST APIs
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `GET` | `/api/health` | Healthcheck returning status UP and MongoDB Atlas confirmation |
+| `GET` | `/api/ar-aging/summary` | AR Aging KPIs (Total Outstanding, Avg/Oldest Days, 4-bucket breakdown) |
+| `GET` | `/api/ar-aging/claims` | List AR claims sorted by daysPending DESC, supports `?bucket=90+` |
+| `POST` | `/api/ar-aging/claims/{id}/follow-up` | Record billing follow-up notes, status, and next schedule |
 | `GET` | `/api/dashboard/metrics` | Dynamic KPIs (Total Claims, Total Outstanding, High-Priority Due, Revenue) |
 | `GET` | `/api/billing-priority` | Real-time queue sorted by `billingPriorityScore DESC`, then `pendingAmount DESC` |
 | `GET` | `/api/claims` | List all claims from MongoDB |
-| `POST` | `/api/claims` | Create a new claim with auto-calculated billing priority |
+| `POST` | `/api/claims` | Create a new claim with auto-calculated billing priority & AR aging |
 | `GET` | `/api/claims/{id}` | Inspect individual claim |
-| `POST` | `/api/claims/{id}/payment` | Record full or partial payment (recalculates priority) |
+| `POST` | `/api/claims/{id}/payment` | Record full or partial payment (recalculates priority & AR balance) |
 | `POST` | `/api/claims/{id}/predict` | Pre-submission AI denial check (Random Forest) |
 | `POST` | `/api/claims/{id}/submit` | Submit claim via simulated EDI 837 network |
 | `POST` | `/api/claims/{id}/accept` | Simulate payer adjudication approval |
@@ -287,7 +314,7 @@ You can verify the end-to-end cloud pipeline using this test case:
 
 ---
 
-## 11. Repository & Team
+## 12. Repository & Team
 * **GitHub Repository**: [https://github.com/BalaKrishnan02/Revenue-Cycle-Command-Center](https://github.com/BalaKrishnan02/Revenue-Cycle-Command-Center)
 * **Frontend Production URL**: [https://rcm-50.vercel.app](https://rcm-50.vercel.app/)
 * **Team**: XIRO TECH

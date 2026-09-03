@@ -45,6 +45,16 @@ public class Claim {
     private Instant lastFollowUpDate;
     private String followUpNotes;
 
+    // AR Aging Fields (Accounts Receivable Tracking)
+    private double allowedAmount;
+    private Instant claimSubmittedDate;
+    private Instant lastPaymentDate;
+    private String agingBucket;    // 0-30, 31-60, 61-90, 90+, PAID/CLOSED
+    private String agingStatus;    // MONITOR, FOLLOW_UP, HIGH_ATTENTION, CRITICAL
+    private Instant nextFollowUpDate;
+    private String followUpStatus; // NOT_STARTED, CONTACTED, WAITING_FOR_PAYER, ESCALATED, RESOLVED
+    private String followUpNote;
+
     private boolean eligibilityVerified;
     private boolean authorizationAvailable;
     private boolean codingComplete;

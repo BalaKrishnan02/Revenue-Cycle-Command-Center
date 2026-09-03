@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import DashboardPage from './pages/DashboardPage';
+import ArAgingPage from './pages/ArAgingPage';
 import CreateClaimPage from './pages/CreateClaimPage';
 import ClaimsListPage from './pages/ClaimsListPage';
 import ClaimDetailPage from './pages/ClaimDetailPage';
@@ -53,6 +54,7 @@ export default function App() {
           <main key={refreshKey} style={{ flex: 1 }}>
             <Routes>
               <Route path="/" element={<DashboardPage />} />
+              <Route path="/ar-aging" element={<ArAgingPage />} />
               <Route path="/create-claim" element={<CreateClaimPage />} />
               <Route path="/claims" element={<ClaimsListPage />} />
               <Route path="/claims/:id" element={<ClaimDetailPage />} />

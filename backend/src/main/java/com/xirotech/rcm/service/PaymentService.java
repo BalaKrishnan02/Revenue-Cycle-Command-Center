@@ -28,6 +28,7 @@ public class PaymentService {
     private final AlertService alertService;
     private final LiveUpdateService liveUpdateService;
     private final BillingPriorityService billingPriorityService;
+    private final ArAgingService arAgingService;
 
     public List<Payment> getAllPayments() {
         return paymentRepository.findAllByOrderByCreatedAtDesc();
@@ -89,8 +90,10 @@ public class PaymentService {
             claim.setPaymentStatus("PARTIALLY_PAID");
         }
 
-        // 3. Recalculate Billing Priority
+        // 3. Recalculate Billing Priority and AR Aging
         billingPriorityService.calculateBillingPriority(claim);
+        claim.setLastPaymentDate(Instant.now());
+        arAgingService.calculateArAging(claim);
         claim.setUpdatedAt(Instant.now());
         Claim updatedClaim = claimRepository.save(claim);
 

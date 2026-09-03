@@ -6,6 +6,134 @@ const STORAGE_KEY_ALERTS = 'rcm_demo_alerts_v1';
 
 export const initialDemoClaims = [
   {
+    id: 'c-6004',
+    claimId: 'CLM6004',
+    patientName: 'Rajeshwari Natarajan',
+    patientReference: 'PT6004',
+    payerName: 'HealthPrime',
+    payerType: 'COMMERCIAL',
+    claimAmount: 150000,
+    totalBillAmount: 150000,
+    paidAmount: 30000,
+    pendingAmount: 120000,
+    daysPending: 110,
+    agingBucket: '90+',
+    agingStatus: 'CRITICAL',
+    billingPriorityScore: 98,
+    billingPriority: 'CRITICAL',
+    priorityReason: 'Critical overdue: 110 days pending. Payer liaison contact required.',
+    paymentStatus: 'PARTIALLY_PAID',
+    status: 'PENDING',
+    riskScore: 26,
+    riskLevel: 'LOW',
+    predictedReason: 'Clean Claim Quality Metrics',
+    recommendation: 'Escalate to HealthPrime liaison.',
+    eligibilityVerified: true,
+    authorizationAvailable: true,
+    codingComplete: true,
+    documentationComplete: true,
+    previousDenials: 2,
+    followUpStatus: 'WAITING_FOR_PAYER',
+    followUpNotes: 'Called HealthPrime claims liaison. Payer requested updated itemized surgical ledger.',
+    createdAt: new Date(Date.now() - 110 * 86400000).toISOString()
+  },
+  {
+    id: 'c-6003',
+    claimId: 'CLM6003',
+    patientName: 'Meera Krishnan',
+    patientReference: 'PT6003',
+    payerName: 'MediSecure',
+    payerType: 'PRIVATE',
+    claimAmount: 120000,
+    totalBillAmount: 120000,
+    paidAmount: 20000,
+    pendingAmount: 100000,
+    daysPending: 75,
+    agingBucket: '61-90',
+    agingStatus: 'HIGH_ATTENTION',
+    billingPriorityScore: 93,
+    billingPriority: 'CRITICAL',
+    priorityReason: 'High-value balance overdue > 60 days. Escalation warning sent.',
+    paymentStatus: 'PARTIALLY_PAID',
+    status: 'PENDING',
+    riskScore: 22,
+    riskLevel: 'LOW',
+    predictedReason: 'Clean Claim Quality Metrics',
+    recommendation: 'Second notice issued to MediSecure.',
+    eligibilityVerified: true,
+    authorizationAvailable: true,
+    codingComplete: true,
+    documentationComplete: true,
+    previousDenials: 1,
+    followUpStatus: 'CONTACTED',
+    followUpNotes: 'Follow-up email sent to MediSecure adjudicator.',
+    createdAt: new Date(Date.now() - 75 * 86400000).toISOString()
+  },
+  {
+    id: 'c-6002',
+    claimId: 'CLM6002',
+    patientName: 'Siddharth Venkat',
+    patientReference: 'PT6002',
+    payerName: 'CareShield',
+    payerType: 'COMMERCIAL',
+    claimAmount: 90000,
+    totalBillAmount: 90000,
+    paidAmount: 10000,
+    pendingAmount: 80000,
+    daysPending: 45,
+    agingBucket: '31-60',
+    agingStatus: 'FOLLOW_UP',
+    billingPriorityScore: 78,
+    billingPriority: 'HIGH',
+    priorityReason: 'First follow-up call placed to CareShield.',
+    paymentStatus: 'PARTIALLY_PAID',
+    status: 'PENDING',
+    riskScore: 18,
+    riskLevel: 'LOW',
+    predictedReason: 'Clean Claim Quality Metrics',
+    recommendation: 'Pending payer review.',
+    eligibilityVerified: true,
+    authorizationAvailable: true,
+    codingComplete: true,
+    documentationComplete: true,
+    previousDenials: 0,
+    followUpStatus: 'NOT_STARTED',
+    followUpNotes: '',
+    createdAt: new Date(Date.now() - 45 * 86400000).toISOString()
+  },
+  {
+    id: 'c-6001',
+    claimId: 'CLM6001',
+    patientName: 'Kavita Ramachandran',
+    patientReference: 'PT6001',
+    payerName: 'Nova Health Insurance',
+    payerType: 'PRIVATE',
+    claimAmount: 100000,
+    totalBillAmount: 100000,
+    paidAmount: 20000,
+    pendingAmount: 80000,
+    daysPending: 20,
+    agingBucket: '0-30',
+    agingStatus: 'MONITOR',
+    billingPriorityScore: 73,
+    billingPriority: 'HIGH',
+    priorityReason: 'Within standard 30-day payment cycle.',
+    paymentStatus: 'PARTIALLY_PAID',
+    status: 'SUBMITTED',
+    riskScore: 15,
+    riskLevel: 'LOW',
+    predictedReason: 'Clean Claim Quality Metrics',
+    recommendation: 'Standard monitoring.',
+    eligibilityVerified: true,
+    authorizationAvailable: true,
+    codingComplete: true,
+    documentationComplete: true,
+    previousDenials: 0,
+    followUpStatus: 'NOT_STARTED',
+    followUpNotes: '',
+    createdAt: new Date(Date.now() - 20 * 86400000).toISOString()
+  },
+  {
     id: 'c-3001',
     claimId: 'CLM3001',
     patientName: 'Vikramaditya Singhania',
@@ -332,3 +460,80 @@ export function calculateDemoMetrics(claims) {
     }
   };
 }
+
+export function calculateDemoArAgingSummary(claims) {
+  const activeClaims = claims.filter(
+    (c) => c.paymentStatus !== 'PAID' && (c.pendingAmount > 0 || !c.agingBucket?.includes('CLOSED'))
+  );
+
+  const totalOutstanding = activeClaims.reduce((acc, c) => acc + (c.pendingAmount || 0), 0);
+  const totalPendingClaims = activeClaims.length;
+
+  const avgDays =
+    totalPendingClaims > 0
+      ? Math.round(activeClaims.reduce((acc, c) => acc + (c.daysPending || 1), 0) / totalPendingClaims)
+      : 0;
+
+  const oldestDays =
+    totalPendingClaims > 0
+      ? Math.max(...activeClaims.map((c) => c.daysPending || 1))
+      : 0;
+
+  const b0_30 = activeClaims.filter((c) => (c.daysPending || 1) <= 30);
+  const b31_60 = activeClaims.filter((c) => (c.daysPending || 1) >= 31 && (c.daysPending || 1) <= 60);
+  const b61_90 = activeClaims.filter((c) => (c.daysPending || 1) >= 61 && (c.daysPending || 1) <= 90);
+  const b90_plus = activeClaims.filter((c) => (c.daysPending || 1) > 90);
+
+  return {
+    totalOutstanding,
+    totalPendingClaims,
+    averageDaysOutstanding: avgDays,
+    oldestPendingDays: oldestDays,
+    buckets: {
+      '0-30': {
+        claimCount: b0_30.length,
+        amount: b0_30.reduce((acc, c) => acc + (c.pendingAmount || 0), 0),
+        status: 'MONITOR'
+      },
+      '31-60': {
+        claimCount: b31_60.length,
+        amount: b31_60.reduce((acc, c) => acc + (c.pendingAmount || 0), 0),
+        status: 'FOLLOW_UP'
+      },
+      '61-90': {
+        claimCount: b61_90.length,
+        amount: b61_90.reduce((acc, c) => acc + (c.pendingAmount || 0), 0),
+        status: 'HIGH_ATTENTION'
+      },
+      '90+': {
+        claimCount: b90_plus.length,
+        amount: b90_plus.reduce((acc, c) => acc + (c.pendingAmount || 0), 0),
+        status: 'CRITICAL'
+      }
+    }
+  };
+}
+
+export function getDemoArAgingClaims(claims, bucket) {
+  let active = claims.filter(
+    (c) => c.paymentStatus !== 'PAID' && (c.pendingAmount > 0 || !c.agingBucket?.includes('CLOSED'))
+  );
+
+  if (bucket && bucket !== 'ALL') {
+    active = active.filter((c) => {
+      const days = c.daysPending || 1;
+      if (bucket === '0-30') return days <= 30;
+      if (bucket === '31-60') return days >= 31 && days <= 60;
+      if (bucket === '61-90') return days >= 61 && days <= 90;
+      if (bucket === '90+') return days > 90;
+      return true;
+    });
+  }
+
+  return active.sort((a, b) => {
+    const daysDiff = (b.daysPending || 1) - (a.daysPending || 1);
+    if (daysDiff !== 0) return daysDiff;
+    return (b.pendingAmount || 0) - (a.pendingAmount || 0);
+  });
+}
+

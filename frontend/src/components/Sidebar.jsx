@@ -2,6 +2,8 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
+  Clock,
+  CalendarClock,
   FilePlus2,
   FileText,
   CreditCard,
@@ -14,6 +16,7 @@ import {
 export default function Sidebar({ activeAlertCount = 0 }) {
   const navItems = [
     { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { to: '/ar-aging', label: 'AR Aging', icon: CalendarClock },
     { to: '/create-claim', label: 'Create Claim', icon: FilePlus2 },
     { to: '/claims', label: 'Claims Command', icon: FileText },
     { to: '/payments', label: 'Payments', icon: CreditCard },

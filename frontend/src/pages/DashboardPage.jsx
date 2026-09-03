@@ -19,7 +19,8 @@ import {
   Coins,
   Sliders,
   Send,
-  ArrowRight
+  ArrowRight,
+  Calendar
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -41,6 +42,7 @@ import {
   getRevenueAnalytics,
   getClaims,
   getBillingPriorityQueue,
+  getArAgingSummary,
   recordPartialPayment,
   recordFollowUp,
   payClaim
@@ -50,6 +52,7 @@ import RiskMeter from '../components/RiskMeter';
 
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState(null);
+  const [arSummary, setArSummary] = useState(null);
   const [denialData, setDenialData] = useState([]);
   const [revenueData, setRevenueData] = useState([]);
   const [recentClaims, setRecentClaims] = useState([]);
@@ -65,18 +68,20 @@ export default function DashboardPage() {
 
   const fetchData = async () => {
     try {
-      const [mRes, dRes, rRes, cRes, pRes] = await Promise.all([
+      const [mRes, dRes, rRes, cRes, pRes, arRes] = await Promise.all([
         getDashboardMetrics(),
         getDenialAnalytics(),
         getRevenueAnalytics(),
         getClaims(),
-        getBillingPriorityQueue()
+        getBillingPriorityQueue(),
+        getArAgingSummary()
       ]);
       setMetrics(mRes.data);
       setDenialData(dRes.data);
       setRevenueData(rRes.data);
       setRecentClaims(cRes.data.slice(0, 7));
       setPriorityQueue(pRes.data);
+      setArSummary(arRes.data);
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
     } finally {
@@ -175,6 +180,13 @@ export default function DashboardPage() {
     }
   };
 
+  const formatINR = (amt) => {
+    if (amt === undefined || amt === null) return '₹0';
+    if (amt >= 10000000) return `₹${(amt / 10000000).toFixed(2)} Cr`;
+    if (amt >= 100000) return `₹${(amt / 100000).toFixed(2)}L`;
+    return `₹${Math.round(amt).toLocaleString()}`;
+  };
+
   // Status Colors for Distribution
   const statusColors = {
     ACCEPTED: '#10b981',
@@ -248,6 +260,68 @@ export default function DashboardPage() {
             <span>Create & Check Claim</span>
           </Link>
         </div>
+      </div>
+
+      {/* AR Aging Summary Widget (Section 22) */}
+      <div style={{
+        background: '#ffffff',
+        border: '1px solid var(--border-color)',
+        borderLeft: '4px solid #f59e0b',
+        borderRadius: 'var(--radius-lg)',
+        padding: '1.25rem 1.75rem',
+        marginBottom: '2rem',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '1.25rem',
+        boxShadow: 'var(--shadow-sm)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div style={{
+            width: '44px',
+            height: '44px',
+            borderRadius: '10px',
+            background: '#fffbeb',
+            color: '#d97706',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <Calendar size={22} />
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.2rem', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: '800', fontSize: '0.95rem', color: 'var(--navy-dark)' }}>
+                Accounts Receivable (AR) Aging Status
+              </span>
+              <span style={{
+                background: '#fef2f2',
+                color: '#dc2626',
+                border: '1px solid #fecaca',
+                padding: '0.15rem 0.55rem',
+                borderRadius: '9999px',
+                fontSize: '0.725rem',
+                fontWeight: '700'
+              }}>
+                90+ Days: {formatINR(arSummary?.buckets?.['90+']?.amount || 0)}
+              </span>
+            </div>
+            <div style={{ fontSize: '0.825rem', color: 'var(--text-muted)' }}>
+              Total Outstanding: <strong style={{ color: '#1e3a8a' }}>{formatINR(arSummary?.totalOutstanding || metrics?.totalOutstanding || 0)}</strong> across <strong style={{ color: '#0f172a' }}>{arSummary?.totalPendingClaims || 0}</strong> unpaid claims.
+            </div>
+          </div>
+        </div>
+
+        <Link
+          to="/ar-aging"
+          className="btn btn-primary btn-sm"
+          style={{ gap: '0.4rem', fontWeight: '700', padding: '0.55rem 1rem' }}
+        >
+          <span>VIEW AR AGING</span>
+          <ArrowRight size={14} />
+        </Link>
       </div>
 
       {/* KPI Cards Grid */}

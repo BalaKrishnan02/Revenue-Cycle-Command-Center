@@ -4,7 +4,9 @@ import {
   saveStoredClaims,
   getStoredAlerts,
   saveStoredAlerts,
-  calculateDemoMetrics
+  calculateDemoMetrics,
+  calculateDemoArAgingSummary,
+  getDemoArAgingClaims
 } from './demoFallback';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
@@ -81,6 +83,39 @@ export const getBillingPriorityQueue = () =>
         .sort((a, b) => (b.billingPriorityScore || 0) - (a.billingPriorityScore || 0));
     }
   );
+
+// AR Aging (Accounts Receivable Tracking)
+export const getArAgingSummary = () =>
+  safeRequest(
+    () => api.get('/ar-aging/summary'),
+    () => calculateDemoArAgingSummary(getStoredClaims())
+  );
+
+export const getArAgingClaims = (bucket = '') =>
+  safeRequest(
+    () => api.get(`/ar-aging/claims${bucket && bucket !== 'ALL' ? `?bucket=${encodeURIComponent(bucket)}` : ''}`),
+    () => getDemoArAgingClaims(getStoredClaims(), bucket)
+  );
+
+export const recordArFollowUp = async (id, followUpData = {}) => {
+  try {
+    return await api.post(`/ar-aging/claims/${id}/follow-up`, followUpData);
+  } catch (err) {
+    if (!err.response || err.code === 'ECONNABORTED' || err.message?.includes('Network Error')) {
+      const claims = getStoredClaims();
+      const claim = claims.find((c) => c.claimId === id || c.id === id);
+      if (claim) {
+        claim.followUpStatus = followUpData.followUpStatus || 'CONTACTED';
+        claim.followUpNotes = followUpData.followUpNote || '';
+        claim.lastFollowUpDate = new Date().toISOString();
+        if (followUpData.nextFollowUpDate) claim.nextFollowUpDate = followUpData.nextFollowUpDate;
+        saveStoredClaims(claims);
+        return { data: claim };
+      }
+    }
+    throw err;
+  }
+};
 
 // Claims CRUD & Lifecycle
 export const getClaims = () =>

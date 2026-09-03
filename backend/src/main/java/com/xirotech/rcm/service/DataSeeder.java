@@ -29,10 +29,16 @@ public class DataSeeder implements CommandLineRunner {
     private final AlertRepository alertRepository;
     private final ClaimHistoryRepository claimHistoryRepository;
     private final BillingPriorityService billingPriorityService;
+    private final ArAgingService arAgingService;
 
     @Override
     public void run(String... args) {
-        // If CLM3001 already exists, don't re-seed
+        // Seed AR Aging showcase claims if not present
+        if (claimRepository.findByClaimId("CLM6001").isEmpty()) {
+            seedArAgingClaims();
+        }
+
+        // If CLM3001 already exists, don't re-seed base priority claims
         if (claimRepository.findByClaimId("CLM3001").isPresent()) {
             log.info("Database already seeded with demo priority claims.");
             return;
@@ -111,9 +117,10 @@ public class DataSeeder implements CommandLineRunner {
                 true, true, true, true, 0,
                 16, "LOW", "Clean Claim Quality Metrics", "Claim settled.", null));
 
-        // Save & calculate priority for all
+        // Save & calculate priority and AR Aging for all
         for (Claim c : seedClaims) {
             billingPriorityService.calculateBillingPriority(c);
+            arAgingService.calculateArAging(c);
         }
         claimRepository.saveAll(seedClaims);
 
@@ -124,6 +131,44 @@ public class DataSeeder implements CommandLineRunner {
         seedAlerts();
 
         log.info("Seeded {} claims with Smart Billing Priority attributes.", seedClaims.size());
+    }
+
+    private void seedArAgingClaims() {
+        log.info("Seeding dedicated AR Aging showcase claims (CLM6001 - CLM6004)...");
+        List<Claim> arClaims = new ArrayList<>();
+
+        // 1. CLM6001: 0-30 Days (MONITOR)
+        arClaims.add(buildPriorityClaim("CLM6001", "Kavita Ramachandran", "PT6001", "Nova Health Insurance", "PRIVATE",
+                100000, 20000, 20, "SUBMITTED", "PARTIALLY_PAID",
+                true, true, true, true, 0,
+                15, "LOW", "Clean Claim Quality Metrics", "Within standard 30-day payment cycle.", null));
+
+        // 2. CLM6002: 31-60 Days (FOLLOW_UP)
+        arClaims.add(buildPriorityClaim("CLM6002", "Siddharth Venkat", "PT6002", "CareShield", "COMMERCIAL",
+                90000, 10000, 45, "PENDING", "PARTIALLY_PAID",
+                true, true, true, true, 0,
+                18, "LOW", "Clean Claim Quality Metrics", "First follow-up call placed to CareShield.", null));
+
+        // 3. CLM6003: 61-90 Days (HIGH_ATTENTION)
+        arClaims.add(buildPriorityClaim("CLM6003", "Meera Krishnan", "PT6003", "MediSecure", "PRIVATE",
+                120000, 20000, 75, "PENDING", "PARTIALLY_PAID",
+                true, true, true, true, 1,
+                22, "LOW", "Clean Claim Quality Metrics", "High-value balance overdue > 60 days. Escalation warning sent.", null));
+
+        // 4. CLM6004: 90+ Days (CRITICAL)
+        arClaims.add(buildPriorityClaim("CLM6004", "Rajeshwari Natarajan", "PT6004", "HealthPrime", "COMMERCIAL",
+                150000, 30000, 110, "PENDING", "PARTIALLY_PAID",
+                true, true, true, true, 2,
+                26, "LOW", "Clean Claim Quality Metrics", "Critical overdue: 110 days pending. Payer liaison contact required.", null));
+
+        for (Claim c : arClaims) {
+            billingPriorityService.calculateBillingPriority(c);
+            arAgingService.calculateArAging(c);
+        }
+
+        claimRepository.saveAll(arClaims);
+        seedPayments(arClaims);
+        log.info("Seeded 4 AR Aging claims: CLM6001, CLM6002, CLM6003, CLM6004.");
     }
 
     private Claim buildPriorityClaim(String claimId, String patient, String ref, String payer, String type,

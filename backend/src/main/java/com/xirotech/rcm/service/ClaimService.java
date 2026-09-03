@@ -30,6 +30,7 @@ public class ClaimService {
     private final AlertService alertService;
     private final LiveUpdateService liveUpdateService;
     private final BillingPriorityService billingPriorityService;
+    private final ArAgingService arAgingService;
 
     public List<Claim> getAllClaims() {
         return claimRepository.findAllByOrderByCreatedAtDesc();
@@ -102,8 +103,9 @@ public class ClaimService {
                     .build();
         }
 
-        // Calculate billing priority score & reason
+        // Calculate billing priority score & reason and AR Aging
         billingPriorityService.calculateBillingPriority(claim);
+        arAgingService.calculateArAging(claim);
         Claim saved = claimRepository.save(claim);
 
         logHistory(saved.getClaimId(), null, "CREATED", "Claim created in billing system. Bill Amount: ₹" + String.format("%,.0f", billAmount));
@@ -196,6 +198,7 @@ public class ClaimService {
         claim.setStatus(newStatus);
         
         billingPriorityService.calculateBillingPriority(claim);
+        arAgingService.calculateArAging(claim);
         claim.setUpdatedAt(Instant.now());
 
         Claim saved = claimRepository.save(claim);
@@ -215,6 +218,9 @@ public class ClaimService {
         String oldStatus = claim.getStatus();
 
         claim.setStatus("SUBMITTED");
+        if (claim.getClaimSubmittedDate() == null) {
+            claim.setClaimSubmittedDate(Instant.now());
+        }
         claim.setUpdatedAt(Instant.now());
         claimRepository.save(claim);
 
@@ -227,6 +233,7 @@ public class ClaimService {
         claim.setStatus(simulatedStatus);
         claim.setDenialReason(denialReason);
         billingPriorityService.calculateBillingPriority(claim);
+        arAgingService.calculateArAging(claim);
         claim.setUpdatedAt(Instant.now());
         Claim finalClaim = claimRepository.save(claim);
 
