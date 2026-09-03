@@ -27,29 +27,32 @@ export default function Sidebar({ activeAlertCount = 0 }) {
   return (
     <aside className="sidebar">
       {/* Brand Header */}
-      <div style={{ padding: '1.5rem', borderBottom: '1px solid #1e293b' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <div style={{
-            width: '38px',
-            height: '38px',
-            borderRadius: '10px',
-            background: 'linear-gradient(135deg, #2563eb, #38bdf8)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 4px 12px rgba(37, 99, 235, 0.4)'
-          }}>
-            <Activity size={22} color="#ffffff" />
-          </div>
+      <div style={{ padding: '1.25rem 1.25rem', borderBottom: '1px solid #1e293b' }}>
+        <NavLink to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', textDecoration: 'none' }}>
+          <img
+            src="/rcm-logo.jpg"
+            alt="RCM Insight Logo"
+            style={{
+              width: '46px',
+              height: '46px',
+              borderRadius: '10px',
+              objectFit: 'contain',
+              background: '#ffffff',
+              padding: '2px',
+              boxShadow: '0 4px 14px rgba(37, 99, 235, 0.4)',
+              border: '1.5px solid rgba(255, 255, 255, 0.25)',
+              flexShrink: 0
+            }}
+          />
           <div>
-            <h1 style={{ fontSize: '1.2rem', fontWeight: '800', letterSpacing: '-0.02em', color: '#ffffff' }}>
+            <div style={{ fontSize: '1.2rem', fontWeight: '800', letterSpacing: '-0.02em', color: '#ffffff', lineHeight: 1.2 }}>
               RCM Insight
-            </h1>
-            <p style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: '500' }}>
-              AI Revenue Cycle Intelligence
-            </p>
+            </div>
+            <div style={{ fontSize: '0.675rem', color: '#94a3b8', fontWeight: '600', letterSpacing: '0.01em', marginTop: '0.15rem' }}>
+              Command Center
+            </div>
           </div>
-        </div>
+        </NavLink>
       </div>
 
       {/* Navigation */}
