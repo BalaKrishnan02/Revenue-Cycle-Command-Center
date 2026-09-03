@@ -85,16 +85,34 @@ export const getBillingPriorityQueue = () =>
   );
 
 // AR Aging (Accounts Receivable Tracking)
-export const getArAgingSummary = () =>
+export const getArAgingSummary = (payer = '') =>
   safeRequest(
-    () => api.get('/ar-aging/summary'),
-    () => calculateDemoArAgingSummary(getStoredClaims())
+    () => api.get(`/ar-aging/summary${payer && payer !== 'ALL' ? `?payer=${encodeURIComponent(payer)}` : ''}`),
+    () => calculateDemoArAgingSummary(getStoredClaims(), payer)
   );
 
-export const getArAgingClaims = (bucket = '') =>
+export const getArAgingClaims = (bucket = '', payer = '') => {
+  const params = [];
+  if (bucket && bucket !== 'ALL') params.push(`bucket=${encodeURIComponent(bucket)}`);
+  if (payer && payer !== 'ALL') params.push(`payer=${encodeURIComponent(payer)}`);
+  const query = params.length > 0 ? `?${params.join('&')}` : '';
+
+  return safeRequest(
+    () => api.get(`/ar-aging/claims${query}`),
+    () => getDemoArAgingClaims(getStoredClaims(), bucket, payer)
+  );
+};
+
+export const getArAgingPayers = () =>
   safeRequest(
-    () => api.get(`/ar-aging/claims${bucket && bucket !== 'ALL' ? `?bucket=${encodeURIComponent(bucket)}` : ''}`),
-    () => getDemoArAgingClaims(getStoredClaims(), bucket)
+    () => api.get('/ar-aging/payers'),
+    () => [
+      { payerName: 'CareShield', payerType: 'COMMERCIAL', totalOutstanding: 354000, claimCount: 7 },
+      { payerName: 'MediSecure', payerType: 'PRIVATE', totalOutstanding: 343500, claimCount: 6 },
+      { payerName: 'Nova Health Insurance', payerType: 'PRIVATE', totalOutstanding: 289000, claimCount: 6 },
+      { payerName: 'HealthPrime', payerType: 'COMMERCIAL', totalOutstanding: 249000, claimCount: 5 },
+      { payerName: 'Unity Payer Network', payerType: 'PRIVATE', totalOutstanding: 178000, claimCount: 3 }
+    ]
   );
 
 export const recordArFollowUp = async (id, followUpData = {}) => {

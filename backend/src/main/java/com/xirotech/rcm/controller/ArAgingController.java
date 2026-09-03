@@ -20,13 +20,20 @@ public class ArAgingController {
     private final ArAgingService arAgingService;
 
     @GetMapping("/summary")
-    public ResponseEntity<ArAgingSummaryResponse> getSummary() {
-        return ResponseEntity.ok(arAgingService.getArAgingSummary());
+    public ResponseEntity<ArAgingSummaryResponse> getSummary(@RequestParam(required = false) String payer) {
+        return ResponseEntity.ok(arAgingService.getArAgingSummary(payer));
     }
 
     @GetMapping("/claims")
-    public ResponseEntity<List<Claim>> getClaims(@RequestParam(required = false) String bucket) {
-        return ResponseEntity.ok(arAgingService.getArAgingClaims(bucket));
+    public ResponseEntity<List<Claim>> getClaims(
+            @RequestParam(required = false) String bucket,
+            @RequestParam(required = false) String payer) {
+        return ResponseEntity.ok(arAgingService.getArAgingClaims(bucket, payer));
+    }
+
+    @GetMapping("/payers")
+    public ResponseEntity<?> getPayers() {
+        return ResponseEntity.ok(arAgingService.getActivePayers());
     }
 
     @PostMapping("/claims/{id}/follow-up")

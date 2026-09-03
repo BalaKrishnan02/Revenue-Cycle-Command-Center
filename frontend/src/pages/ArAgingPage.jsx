@@ -18,7 +18,9 @@ import {
   ChevronRight,
   ShieldAlert,
   HelpCircle,
-  Coins
+  Coins,
+  Building2,
+  X
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -32,6 +34,7 @@ import {
 import {
   getArAgingSummary,
   getArAgingClaims,
+  getArAgingPayers,
   recordArFollowUp,
   recordPartialPayment,
   payClaim
@@ -41,6 +44,8 @@ export default function ArAgingPage() {
   const [summary, setSummary] = useState(null);
   const [claims, setClaims] = useState([]);
   const [selectedBucket, setSelectedBucket] = useState('ALL');
+  const [selectedPayer, setSelectedPayer] = useState('ALL');
+  const [payersList, setPayersList] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -60,15 +65,17 @@ export default function ArAgingPage() {
   // Payment Form
   const [paymentAmount, setPaymentAmount] = useState('');
 
-  const fetchData = async (bucket = selectedBucket) => {
+  const fetchData = async (bucket = selectedBucket, payer = selectedPayer) => {
     try {
       setError(null);
-      const [sumRes, claimsRes] = await Promise.all([
-        getArAgingSummary(),
-        getArAgingClaims(bucket)
+      const [sumRes, claimsRes, payersRes] = await Promise.all([
+        getArAgingSummary(payer),
+        getArAgingClaims(bucket, payer),
+        getArAgingPayers()
       ]);
       setSummary(sumRes.data);
       setClaims(claimsRes.data);
+      if (payersRes?.data) setPayersList(payersRes.data);
     } catch (err) {
       console.error('Error loading AR Aging data:', err);
       setError('Unable to load AR Aging data. Please retry.');
@@ -79,21 +86,28 @@ export default function ArAgingPage() {
   };
 
   useEffect(() => {
-    fetchData(selectedBucket);
-    const interval = setInterval(() => fetchData(selectedBucket), 4000);
+    fetchData(selectedBucket, selectedPayer);
+    const interval = setInterval(() => fetchData(selectedBucket, selectedPayer), 4000);
     return () => clearInterval(interval);
-  }, [selectedBucket]);
+  }, [selectedBucket, selectedPayer]);
 
   const handleBucketSelect = (bucketKey) => {
     const nextBucket = selectedBucket === bucketKey ? 'ALL' : bucketKey;
     setSelectedBucket(nextBucket);
     setLoading(true);
-    fetchData(nextBucket);
+    fetchData(nextBucket, selectedPayer);
+  };
+
+  const handlePayerSelect = (payerName) => {
+    const nextPayer = selectedPayer === payerName ? 'ALL' : payerName;
+    setSelectedPayer(nextPayer);
+    setLoading(true);
+    fetchData(selectedBucket, nextPayer);
   };
 
   const handleRefresh = () => {
     setIsRefreshing(true);
-    fetchData(selectedBucket);
+    fetchData(selectedBucket, selectedPayer);
   };
 
   // Open Follow-up Modal
@@ -144,7 +158,7 @@ export default function ArAgingPage() {
       setFeedback({ type: 'success', message: `Follow-up logged for ${selectedClaim.claimId}.` });
       setTimeout(() => {
         closeModal();
-        fetchData(selectedBucket);
+        fetchData(selectedBucket, selectedPayer);
       }, 1000);
     } catch (err) {
       setFeedback({ type: 'error', message: 'Failed to record follow-up. Please try again.' });
@@ -184,7 +198,7 @@ export default function ArAgingPage() {
 
       setTimeout(() => {
         closeModal();
-        fetchData(selectedBucket);
+        fetchData(selectedBucket, selectedPayer);
       }, 1200);
     } catch (err) {
       setFeedback({ type: 'error', message: 'Failed to process payment. Please try again.' });
@@ -254,23 +268,10 @@ export default function ArAgingPage() {
     }
   };
 
-  const getStatusBadgeStyle = (status) => {
-    switch (status) {
-      case 'CRITICAL':
-        return { bg: '#dc2626', text: '#ffffff' };
-      case 'HIGH_ATTENTION':
-        return { bg: '#d97706', text: '#ffffff' };
-      case 'FOLLOW_UP':
-        return { bg: '#2563eb', text: '#ffffff' };
-      default:
-        return { bg: '#059669', text: '#ffffff' };
-    }
-  };
-
   return (
     <div className="page-wrapper">
       {/* 1. Page Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.35rem' }}>
             <h1 style={{ fontSize: '1.75rem', fontWeight: '800', color: 'var(--navy-dark)', letterSpacing: '-0.02em' }}>
@@ -312,6 +313,139 @@ export default function ArAgingPage() {
         </div>
       </div>
 
+      {/* 2. Dedicated Insurance Payer Selector (Pills / Cards) */}
+      <div style={{
+        backgroundColor: '#ffffff',
+        border: '1px solid var(--border-color)',
+        borderRadius: 'var(--radius-lg)',
+        padding: '1.25rem 1.5rem',
+        marginBottom: '1.75rem',
+        boxShadow: 'var(--shadow-sm)'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Building2 size={18} color="#2563eb" />
+            <h2 style={{ fontSize: '1rem', fontWeight: '800', color: 'var(--navy-dark)', margin: 0 }}>
+              Filter by Insurance Payer Name
+            </h2>
+            <span style={{ fontSize: '0.775rem', color: 'var(--text-muted)' }}>
+              (Click any payer to filter AR Aging metrics & claims)
+            </span>
+          </div>
+
+          {selectedPayer !== 'ALL' && (
+            <button
+              onClick={() => handlePayerSelect('ALL')}
+              className="btn btn-secondary btn-sm"
+              style={{ fontSize: '0.75rem', padding: '0.25rem 0.65rem' }}
+            >
+              <X size={13} /> Reset to All Payers
+            </button>
+          )}
+        </div>
+
+        {/* Payer Selection Grid */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '0.75rem'
+        }}>
+          {/* All Payers Pill */}
+          <button
+            type="button"
+            onClick={() => handlePayerSelect('ALL')}
+            style={{
+              textAlign: 'left',
+              background: selectedPayer === 'ALL' ? '#eff6ff' : '#f8fafc',
+              border: selectedPayer === 'ALL' ? '2px solid #2563eb' : '1px solid var(--border-color)',
+              borderRadius: 'var(--radius-md)',
+              padding: '0.65rem 0.9rem',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              boxShadow: selectedPayer === 'ALL' ? '0 2px 8px rgba(37, 99, 235, 0.15)' : 'none'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
+              <span style={{ fontWeight: '800', fontSize: '0.85rem', color: selectedPayer === 'ALL' ? '#1d4ed8' : 'var(--navy-dark)' }}>
+                All Insurance Payers
+              </span>
+              {selectedPayer === 'ALL' && <CheckCircle2 size={15} color="#2563eb" />}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Hospital-wide view
+            </div>
+          </button>
+
+          {/* Individual Payers */}
+          {payersList.map((p) => {
+            const isSelected = selectedPayer.toLowerCase() === p.payerName.toLowerCase();
+            return (
+              <button
+                key={p.payerName}
+                type="button"
+                onClick={() => handlePayerSelect(p.payerName)}
+                style={{
+                  textAlign: 'left',
+                  background: isSelected ? '#eff6ff' : '#ffffff',
+                  border: isSelected ? '2px solid #2563eb' : '1px solid var(--border-color)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '0.65rem 0.9rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  boxShadow: isSelected ? '0 2px 8px rgba(37, 99, 235, 0.15)' : 'none'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                  <span style={{ fontWeight: '700', fontSize: '0.85rem', color: isSelected ? '#1d4ed8' : 'var(--navy-dark)' }}>
+                    {p.payerName}
+                  </span>
+                  <span style={{
+                    fontSize: '0.65rem',
+                    fontWeight: '800',
+                    padding: '0.1rem 0.4rem',
+                    borderRadius: '9999px',
+                    background: p.payerType === 'COMMERCIAL' ? '#f0fdf4' : '#f8fafc',
+                    color: p.payerType === 'COMMERCIAL' ? '#047857' : '#475569',
+                    border: `1px solid ${p.payerType === 'COMMERCIAL' ? '#bbf7d0' : '#cbd5e1'}`
+                  }}>
+                    {p.payerType || 'COMMERCIAL'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem' }}>
+                  <strong style={{ color: '#dc2626' }}>{formatINR(p.totalOutstanding)}</strong>
+                  <span style={{ color: 'var(--text-muted)' }}>{p.claimCount} claims</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {selectedPayer !== 'ALL' && (
+          <div style={{
+            marginTop: '0.75rem',
+            padding: '0.45rem 0.75rem',
+            background: '#f0fdf4',
+            border: '1px solid #bbf7d0',
+            borderRadius: '6px',
+            fontSize: '0.775rem',
+            color: '#166534',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            <span>
+              Currently viewing AR Aging specifically for <strong>{selectedPayer}</strong>.
+            </span>
+            <button
+              onClick={() => handlePayerSelect('ALL')}
+              style={{ background: 'none', border: 'none', color: '#166534', textDecoration: 'underline', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '700' }}
+            >
+              Clear
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Error Banner */}
       {error && (
         <div style={{
@@ -329,13 +463,13 @@ export default function ArAgingPage() {
             <AlertTriangle size={18} />
             <span style={{ fontSize: '0.875rem', fontWeight: '600' }}>{error}</span>
           </div>
-          <button onClick={() => fetchData(selectedBucket)} className="btn btn-danger btn-sm">
+          <button onClick={() => fetchData(selectedBucket, selectedPayer)} className="btn btn-danger btn-sm">
             Retry
           </button>
         </div>
       )}
 
-      {/* 2. Top 4 KPI Cards */}
+      {/* 3. Top 4 KPI Cards */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
@@ -356,7 +490,7 @@ export default function ArAgingPage() {
             {loading ? '...' : formatINR(summary?.totalOutstanding || 0)}
           </div>
           <div style={{ fontSize: '0.775rem', color: 'var(--text-muted)' }}>
-            Total unpaid insurance revenue
+            {selectedPayer !== 'ALL' ? `Unpaid by ${selectedPayer}` : 'Total unpaid insurance revenue'}
           </div>
         </div>
 
@@ -415,7 +549,7 @@ export default function ArAgingPage() {
         </div>
       </div>
 
-      {/* 3. Four Aging Bucket Cards (Interactive / Filterable) */}
+      {/* 4. Four Aging Bucket Cards (Interactive / Filterable) */}
       <div style={{ marginBottom: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
           <h2 style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--navy-dark)' }}>
@@ -583,12 +717,13 @@ export default function ArAgingPage() {
         </div>
       </div>
 
-      {/* 4. Aging Bar Chart */}
+      {/* 5. Aging Bar Chart */}
       <div className="card" style={{ marginBottom: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
           <div>
             <h2 className="card-title" style={{ marginBottom: '0.25rem' }}>
               <ArrowUpDown size={18} color="#2563eb" /> Outstanding Revenue by Aging Bucket
+              {selectedPayer !== 'ALL' && <span style={{ color: '#2563eb', fontSize: '0.9rem' }}> — {selectedPayer}</span>}
             </h2>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
               Unpaid rupee value categorized by duration outstanding
@@ -628,21 +763,23 @@ export default function ArAgingPage() {
         </div>
       </div>
 
-      {/* 5. Claims Table */}
+      {/* 6. Claims Table */}
       <div className="card">
         {/* Table Controls */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <h2 className="card-title" style={{ marginBottom: '0.25rem' }}>
               <Clock size={18} color="#2563eb" />
-              Aging Claims {selectedBucket !== 'ALL' && <span style={{ color: '#2563eb' }}>({selectedBucket} Bucket)</span>}
+              Aging Claims{' '}
+              {selectedBucket !== 'ALL' && <span style={{ color: '#2563eb' }}>({selectedBucket} Bucket)</span>}
+              {selectedPayer !== 'ALL' && <span style={{ color: '#059669' }}> • {selectedPayer}</span>}
             </h2>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
               Sorted by days pending (oldest first) then unpaid amount
             </p>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
             <div style={{ position: 'relative' }}>
               <Search size={16} color="#64748b" style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)' }} />
               <input
@@ -651,15 +788,31 @@ export default function ArAgingPage() {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="form-control"
-                style={{ paddingLeft: '2.25rem', width: '240px', fontSize: '0.85rem' }}
+                style={{ paddingLeft: '2.25rem', width: '220px', fontSize: '0.85rem' }}
               />
             </div>
 
+            {/* Insurance Payer Dropdown Filter */}
+            <select
+              value={selectedPayer}
+              onChange={(e) => handlePayerSelect(e.target.value)}
+              className="form-control"
+              style={{ fontSize: '0.85rem', minWidth: '220px', borderColor: selectedPayer !== 'ALL' ? '#2563eb' : undefined }}
+            >
+              <option value="ALL">All Insurance Payers</option>
+              {payersList.map((p) => (
+                <option key={p.payerName} value={p.payerName}>
+                  {p.payerName} ({p.payerType || 'COMMERCIAL'})
+                </option>
+              ))}
+            </select>
+
+            {/* Aging Bucket Dropdown */}
             <select
               value={selectedBucket}
               onChange={(e) => handleBucketSelect(e.target.value)}
               className="form-control"
-              style={{ fontSize: '0.85rem', width: '160px' }}
+              style={{ fontSize: '0.85rem', width: '150px' }}
             >
               <option value="ALL">All Buckets</option>
               <option value="0-30">0–30 Days</option>
@@ -694,11 +847,20 @@ export default function ArAgingPage() {
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
                       <HelpCircle size={32} color="#94a3b8" />
                       <div style={{ fontWeight: '600', fontSize: '0.95rem' }}>
-                        No outstanding claims in this aging bucket.
+                        No outstanding claims in this view.
                       </div>
                       <div style={{ fontSize: '0.8rem' }}>
-                        All bills in this category are either paid or have moved to another bucket.
+                        No unsettled bills match the selected payer ({selectedPayer}) and aging bucket ({selectedBucket}).
                       </div>
+                      {(selectedPayer !== 'ALL' || selectedBucket !== 'ALL') && (
+                        <button
+                          onClick={() => { setSelectedPayer('ALL'); setSelectedBucket('ALL'); }}
+                          className="btn btn-secondary btn-sm"
+                          style={{ marginTop: '0.5rem' }}
+                        >
+                          Clear All Filters
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -735,9 +897,31 @@ export default function ArAgingPage() {
                         </div>
                       </td>
 
-                      {/* Payer */}
-                      <td style={{ fontWeight: '600', color: 'var(--navy-text)' }}>
-                        {claim.payerName}
+                      {/* Clickable Payer Name */}
+                      <td>
+                        <button
+                          type="button"
+                          onClick={() => handlePayerSelect(claim.payerName)}
+                          title={`Click to filter AR Aging specifically for ${claim.payerName}`}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            fontWeight: '700',
+                            color: selectedPayer.toLowerCase() === claim.payerName?.toLowerCase() ? '#2563eb' : 'var(--navy-text)',
+                            textAlign: 'left',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                            textDecoration: selectedPayer.toLowerCase() === claim.payerName?.toLowerCase() ? 'underline' : 'none'
+                          }}
+                        >
+                          <span>{claim.payerName}</span>
+                          {selectedPayer.toLowerCase() === claim.payerName?.toLowerCase() && (
+                            <CheckCircle2 size={13} color="#2563eb" />
+                          )}
+                        </button>
                         <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
                           {claim.payerType || 'COMMERCIAL'}
                         </div>

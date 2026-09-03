@@ -461,10 +461,16 @@ export function calculateDemoMetrics(claims) {
   };
 }
 
-export function calculateDemoArAgingSummary(claims) {
-  const activeClaims = claims.filter(
+export function calculateDemoArAgingSummary(claims, payer = '') {
+  let activeClaims = claims.filter(
     (c) => c.paymentStatus !== 'PAID' && (c.pendingAmount > 0 || !c.agingBucket?.includes('CLOSED'))
   );
+
+  if (payer && payer !== 'ALL') {
+    activeClaims = activeClaims.filter(
+      (c) => c.payerName?.toLowerCase() === payer.toLowerCase()
+    );
+  }
 
   const totalOutstanding = activeClaims.reduce((acc, c) => acc + (c.pendingAmount || 0), 0);
   const totalPendingClaims = activeClaims.length;
@@ -514,10 +520,16 @@ export function calculateDemoArAgingSummary(claims) {
   };
 }
 
-export function getDemoArAgingClaims(claims, bucket) {
+export function getDemoArAgingClaims(claims, bucket = '', payer = '') {
   let active = claims.filter(
     (c) => c.paymentStatus !== 'PAID' && (c.pendingAmount > 0 || !c.agingBucket?.includes('CLOSED'))
   );
+
+  if (payer && payer !== 'ALL') {
+    active = active.filter(
+      (c) => c.payerName?.toLowerCase() === payer.toLowerCase()
+    );
+  }
 
   if (bucket && bucket !== 'ALL') {
     active = active.filter((c) => {

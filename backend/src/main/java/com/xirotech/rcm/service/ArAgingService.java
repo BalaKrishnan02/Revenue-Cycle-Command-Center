@@ -88,8 +88,9 @@ public class ArAgingService {
 
     /**
      * Compute aggregate AR Aging Summary KPIs and 4-bucket breakdown.
+     * Optionally filtered by insurance payer.
      */
-    public ArAgingSummaryResponse getArAgingSummary() {
+    public ArAgingSummaryResponse getArAgingSummary(String payer) {
         List<Claim> allClaims = claimRepository.findAll();
 
         // Refresh calculations in-memory
@@ -100,6 +101,8 @@ public class ArAgingService {
         // Filter active outstanding claims (exclude settled)
         List<Claim> activeClaims = allClaims.stream()
                 .filter(c -> !"PAID/CLOSED".equalsIgnoreCase(c.getAgingBucket()) && c.getPendingAmount() > 0.001)
+                .filter(c -> payer == null || payer.isBlank() || payer.equalsIgnoreCase("ALL") || 
+                        (c.getPayerName() != null && c.getPayerName().equalsIgnoreCase(payer.trim())))
                 .toList();
 
         double totalOutstanding = activeClaims.stream()
@@ -149,11 +152,15 @@ public class ArAgingService {
                 .build();
     }
 
+    public ArAgingSummaryResponse getArAgingSummary() {
+        return getArAgingSummary(null);
+    }
+
     /**
-     * Return list of active AR aging claims, optionally filtered by bucket (0-30, 31-60, 61-90, 90+).
+     * Return list of active AR aging claims, optionally filtered by bucket and insurance payer.
      * Sorted by daysPending DESC, then pendingAmount DESC.
      */
-    public List<Claim> getArAgingClaims(String bucket) {
+    public List<Claim> getArAgingClaims(String bucket, String payer) {
         List<Claim> allClaims = claimRepository.findAll();
 
         for (Claim c : allClaims) {
@@ -163,11 +170,50 @@ public class ArAgingService {
         List<Claim> filtered = allClaims.stream()
                 .filter(c -> !"PAID/CLOSED".equalsIgnoreCase(c.getAgingBucket()) && c.getPendingAmount() > 0.001)
                 .filter(c -> bucket == null || bucket.isBlank() || bucket.equalsIgnoreCase("ALL") || bucket.equalsIgnoreCase(c.getAgingBucket()))
+                .filter(c -> payer == null || payer.isBlank() || payer.equalsIgnoreCase("ALL") || 
+                        (c.getPayerName() != null && c.getPayerName().equalsIgnoreCase(payer.trim())))
                 .sorted(Comparator.comparingInt(Claim::getDaysPending).reversed()
                         .thenComparing(Comparator.comparingDouble(Claim::getPendingAmount).reversed()))
                 .collect(Collectors.toList());
 
         return filtered;
+    }
+
+    public List<Claim> getArAgingClaims(String bucket) {
+        return getArAgingClaims(bucket, null);
+    }
+
+    /**
+     * Get distinct list of insurance payers with outstanding balances in AR aging.
+     */
+    public List<Map<String, Object>> getActivePayers() {
+        List<Claim> allClaims = claimRepository.findAll();
+        for (Claim c : allClaims) {
+            calculateArAging(c);
+        }
+
+        Map<String, List<Claim>> byPayer = allClaims.stream()
+                .filter(c -> !"PAID/CLOSED".equalsIgnoreCase(c.getAgingBucket()) && c.getPendingAmount() > 0.001)
+                .filter(c -> c.getPayerName() != null && !c.getPayerName().isBlank())
+                .collect(Collectors.groupingBy(Claim::getPayerName));
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map.Entry<String, List<Claim>> entry : byPayer.entrySet()) {
+            String payerName = entry.getKey();
+            List<Claim> payerClaims = entry.getValue();
+            double totalPending = payerClaims.stream().mapToDouble(Claim::getPendingAmount).sum();
+            String payerType = payerClaims.get(0).getPayerType();
+
+            Map<String, Object> map = new LinkedHashMap<>();
+            map.put("payerName", payerName);
+            map.put("payerType", payerType != null ? payerType : "COMMERCIAL");
+            map.put("totalOutstanding", totalPending);
+            map.put("claimCount", payerClaims.size());
+            result.add(map);
+        }
+
+        result.sort((a, b) -> Double.compare((Double) b.get("totalOutstanding"), (Double) a.get("totalOutstanding")));
+        return result;
     }
 
     /**
