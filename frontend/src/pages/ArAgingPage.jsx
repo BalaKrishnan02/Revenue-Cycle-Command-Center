@@ -21,6 +21,8 @@ import {
   HelpCircle,
   Coins,
   Building2,
+  Users,
+  User,
   X
 } from 'lucide-react';
 import {
@@ -548,73 +550,289 @@ export default function ArAgingPage() {
           </div>
         </div>
 
-        {/* Selected Day Amount Inspection Banner */}
+        {/* Selected Day Amount Inspection Banner & Claimed Person Data */}
         {selectedDate !== 'ALL' && (
           <div style={{
             background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
             color: '#ffffff',
             borderRadius: 'var(--radius-md)',
-            padding: '1rem 1.25rem',
-            marginBottom: '1rem',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: '1rem',
+            padding: '1.25rem 1.5rem',
+            marginBottom: '1.25rem',
             boxShadow: 'var(--shadow-md)'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-              <div style={{
-                width: '42px',
-                height: '42px',
-                borderRadius: '10px',
-                background: 'rgba(59, 130, 246, 0.2)',
-                color: '#60a5fa',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: '800'
-              }}>
-                <Calendar size={22} />
+            {/* Top KPI Header */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '1rem',
+              paddingBottom: '1rem',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                <div style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '10px',
+                  background: 'rgba(59, 130, 246, 0.25)',
+                  color: '#60a5fa',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: '800'
+                }}>
+                  <Calendar size={24} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    DAY INSPECTION REPORT
+                  </div>
+                  <div style={{ fontSize: '1.35rem', fontWeight: '800', letterSpacing: '-0.01em' }}>
+                    {formatDisplayDate(selectedDate)}
+                  </div>
+                </div>
               </div>
-              <div>
-                <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  DAY INSPECTION REPORT
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1.75rem', flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>TOTAL CLAIM AMOUNT BILLED</div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: '800', color: '#60a5fa' }}>
+                    {formatINR(selectedDayTotalClaimed)}
+                  </div>
                 </div>
-                <div style={{ fontSize: '1.25rem', fontWeight: '800', letterSpacing: '-0.01em' }}>
-                  {formatDisplayDate(selectedDate)}
+
+                <div>
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>AMOUNT PAID</div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: '800', color: '#34d399' }}>
+                    {formatINR(selectedDayTotalPaid)}
+                  </div>
                 </div>
+
+                <div>
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>AMOUNT PENDING (AR)</div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: '800', color: '#f87171' }}>
+                    {formatINR(selectedDayTotalPending)}
+                  </div>
+                </div>
+
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  padding: '0.4rem 0.85rem',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 255, 255, 0.15)'
+                }}>
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>CLAIMS COUNT</div>
+                  <div style={{ fontSize: '1.3rem', fontWeight: '800', color: '#ffffff' }}>
+                    {filteredClaims.length} Claims
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleDateSelect('ALL')}
+                  className="btn btn-secondary btn-sm"
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.15)',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    color: '#ffffff',
+                    fontSize: '0.75rem',
+                    padding: '0.35rem 0.75rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.3rem'
+                  }}
+                >
+                  <X size={13} /> Clear Date
+                </button>
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1.75rem', flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>TOTAL CLAIM AMOUNT BILLED</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#60a5fa' }}>
-                  {formatINR(selectedDayTotalClaimed)}
+            {/* Claimed Persons Data Breakdown Section */}
+            <div style={{ marginTop: '1.25rem' }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '0.75rem',
+                flexWrap: 'wrap',
+                gap: '0.5rem'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Users size={17} color="#60a5fa" />
+                  <span style={{ fontSize: '0.95rem', fontWeight: '800', letterSpacing: '-0.01em', color: '#ffffff' }}>
+                    Claimed Persons Data on {formatDisplayDate(selectedDate)} ({filteredClaims.length} Patient Claims)
+                  </span>
                 </div>
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                  Itemized individual patient claims submitted on this date
+                </span>
               </div>
 
-              <div>
-                <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>AMOUNT PAID</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#34d399' }}>
-                  {formatINR(selectedDayTotalPaid)}
+              {filteredClaims.length === 0 ? (
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  padding: '1.5rem',
+                  borderRadius: '8px',
+                  textAlign: 'center',
+                  color: '#94a3b8',
+                  fontSize: '0.85rem'
+                }}>
+                  No patient claims recorded on this specific date.
                 </div>
-              </div>
+              ) : (
+                <div style={{
+                  overflowX: 'auto',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  background: 'rgba(15, 23, 42, 0.6)'
+                }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem' }}>
+                    <thead>
+                      <tr style={{ background: 'rgba(255, 255, 255, 0.06)', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                        <th style={{ padding: '0.65rem 0.9rem', textAlign: 'left', color: '#cbd5e1', fontWeight: '700' }}>Claimed Person (Patient)</th>
+                        <th style={{ padding: '0.65rem 0.9rem', textAlign: 'left', color: '#cbd5e1', fontWeight: '700' }}>Claim ID</th>
+                        <th style={{ padding: '0.65rem 0.9rem', textAlign: 'left', color: '#cbd5e1', fontWeight: '700' }}>Insurance Payer</th>
+                        <th style={{ padding: '0.65rem 0.9rem', textAlign: 'right', color: '#cbd5e1', fontWeight: '700' }}>Claim Amount Billed</th>
+                        <th style={{ padding: '0.65rem 0.9rem', textAlign: 'right', color: '#cbd5e1', fontWeight: '700' }}>Paid</th>
+                        <th style={{ padding: '0.65rem 0.9rem', textAlign: 'right', color: '#cbd5e1', fontWeight: '700' }}>Pending (AR)</th>
+                        <th style={{ padding: '0.65rem 0.9rem', textAlign: 'center', color: '#cbd5e1', fontWeight: '700' }}>Aging Status</th>
+                        <th style={{ padding: '0.65rem 0.9rem', textAlign: 'right', color: '#cbd5e1', fontWeight: '700' }}>Quick Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredClaims.map((claim, idx) => {
+                        const bStyle = getBucketBadgeStyle(claim.agingBucket);
+                        return (
+                          <tr
+                            key={claim.id || claim.claimId}
+                            style={{
+                              borderBottom: idx !== filteredClaims.length - 1 ? '1px solid rgba(255, 255, 255, 0.07)' : 'none',
+                              backgroundColor: idx % 2 === 0 ? 'transparent' : 'rgba(255, 255, 255, 0.02)'
+                            }}
+                          >
+                            {/* Patient Name */}
+                            <td style={{ padding: '0.65rem 0.9rem' }}>
+                              <div style={{ fontWeight: '800', color: '#ffffff', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                <User size={13} color="#60a5fa" />
+                                <span>{claim.patientName}</span>
+                              </div>
+                              <div style={{ fontSize: '0.7rem', color: '#94a3b8', paddingLeft: '1.2rem' }}>
+                                Ref: {claim.patientReference || 'PT-REF'}
+                              </div>
+                            </td>
 
-              <div>
-                <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>AMOUNT PENDING (AR)</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#f87171' }}>
-                  {formatINR(selectedDayTotalPending)}
-                </div>
-              </div>
+                            {/* Claim ID */}
+                            <td style={{ padding: '0.65rem 0.9rem' }}>
+                              <Link
+                                to={`/claims/${claim.claimId || claim.id}`}
+                                style={{ fontWeight: '800', color: '#60a5fa', textDecoration: 'none' }}
+                              >
+                                {claim.claimId}
+                              </Link>
+                            </td>
 
-              <div>
-                <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>CLAIMS COUNT</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#ffffff' }}>
-                  {filteredClaims.length} Claims
+                            {/* Insurance Payer */}
+                            <td style={{ padding: '0.65rem 0.9rem' }}>
+                              <div style={{ fontWeight: '700', color: '#e2e8f0' }}>
+                                {claim.payerName}
+                              </div>
+                              <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                                {claim.payerType || 'COMMERCIAL'}
+                              </div>
+                            </td>
+
+                            {/* Claim Amount */}
+                            <td style={{ padding: '0.65rem 0.9rem', textAlign: 'right', fontWeight: '700', color: '#93c5fd' }}>
+                              ₹{Number(claim.totalBillAmount || claim.claimAmount || 0).toLocaleString()}
+                            </td>
+
+                            {/* Paid Amount */}
+                            <td style={{ padding: '0.65rem 0.9rem', textAlign: 'right', fontWeight: '700', color: '#34d399' }}>
+                              ₹{Number(claim.paidAmount || 0).toLocaleString()}
+                            </td>
+
+                            {/* Pending Amount */}
+                            <td style={{ padding: '0.65rem 0.9rem', textAlign: 'right', fontWeight: '800', color: '#f87171', fontSize: '0.9rem' }}>
+                              ₹{Number(claim.pendingAmount || 0).toLocaleString()}
+                            </td>
+
+                            {/* Aging Status */}
+                            <td style={{ padding: '0.65rem 0.9rem', textAlign: 'center' }}>
+                              <span style={{
+                                backgroundColor: bStyle.bg,
+                                color: bStyle.text,
+                                border: `1px solid ${bStyle.border}`,
+                                padding: '0.15rem 0.5rem',
+                                borderRadius: '9999px',
+                                fontSize: '0.7rem',
+                                fontWeight: '800'
+                              }}>
+                                {bStyle.label} ({claim.daysPending || 1}d)
+                              </span>
+                            </td>
+
+                            {/* Quick Actions */}
+                            <td style={{ padding: '0.65rem 0.9rem', textAlign: 'right' }}>
+                              <div style={{ display: 'inline-flex', gap: '0.35rem' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => openFollowUpModal(claim)}
+                                  title="Log Follow-Up"
+                                  style={{
+                                    background: 'rgba(255, 255, 255, 0.1)',
+                                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                                    color: '#ffffff',
+                                    borderRadius: '6px',
+                                    padding: '0.3rem 0.5rem',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  <PhoneCall size={12} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openPartialPayModal(claim)}
+                                  title="Record Payment"
+                                  style={{
+                                    background: '#2563eb',
+                                    border: 'none',
+                                    color: '#ffffff',
+                                    borderRadius: '6px',
+                                    padding: '0.3rem 0.6rem',
+                                    cursor: 'pointer',
+                                    fontSize: '0.75rem',
+                                    fontWeight: '700'
+                                  }}
+                                >
+                                  Pay
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openPayFullModal(claim)}
+                                  title="Settle in Full"
+                                  style={{
+                                    background: '#059669',
+                                    border: 'none',
+                                    color: '#ffffff',
+                                    borderRadius: '6px',
+                                    padding: '0.3rem 0.6rem',
+                                    cursor: 'pointer',
+                                    fontSize: '0.75rem',
+                                    fontWeight: '700'
+                                  }}
+                                >
+                                  Settle
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         )}
