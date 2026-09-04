@@ -23,7 +23,7 @@ export default function CreateClaimPage() {
     claimId: '',
     patientName: '',
     patientReference: '',
-    patientEmail: 'balakrishnana206k@gmail.com',
+    patientEmail: 'balakrishnan206k@gmail.com',
     payerName: 'Nova Health Insurance',
     payerType: 'PRIVATE',
     claimAmount: 25000,
@@ -112,7 +112,7 @@ export default function CreateClaimPage() {
       claimId: 'CLM2055',
       patientName: 'Demo Patient',
       patientReference: 'PT-2055',
-      patientEmail: 'balakrishnana206k@gmail.com',
+      patientEmail: 'balakrishnan206k@gmail.com',
       payerName: 'Nova Health Insurance',
       payerType: 'PRIVATE',
       claimAmount: 25000,
@@ -129,7 +129,7 @@ export default function CreateClaimPage() {
       claimId: 'CLM2056',
       patientName: 'Demo Patient 2',
       patientReference: 'PT-2056',
-      patientEmail: 'balakrishnana206k@gmail.com',
+      patientEmail: 'balakrishnan206k@gmail.com',
       payerName: 'Nova Health Insurance',
       payerType: 'PRIVATE',
       claimAmount: 32000,
@@ -222,7 +222,7 @@ export default function CreateClaimPage() {
                 </label>
                 <button
                   type="button"
-                  onClick={() => setFormData((p) => ({ ...p, patientEmail: 'balakrishnana206k@gmail.com' }))}
+                  onClick={() => setFormData((p) => ({ ...p, patientEmail: 'balakrishnan206k@gmail.com' }))}
                   style={{
                     background: '#eff6ff',
                     border: '1px solid #bfdbfe',
@@ -233,7 +233,7 @@ export default function CreateClaimPage() {
                     borderRadius: '9999px',
                     cursor: 'pointer'
                   }}
-                  title="Click to fill balakrishnana206k@gmail.com"
+                  title="Click to fill balakrishnan206k@gmail.com"
                 >
                   ⚡ My Email
                 </button>
@@ -242,7 +242,7 @@ export default function CreateClaimPage() {
                 type="email"
                 name="patientEmail"
                 className="form-control"
-                placeholder="balakrishnana206k@gmail.com"
+                placeholder="balakrishnan206k@gmail.com"
                 value={formData.patientEmail}
                 onChange={handleChange}
               />

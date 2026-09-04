@@ -29,13 +29,13 @@ public class LifecycleEmailService {
     @Autowired(required = false)
     private JavaMailSender mailSender;
 
-    @Value("${spring.mail.username:}")
+    @Value("${spring.mail.username:balakrishnan206k@gmail.com}")
     private String mailUsername;
 
-    @Value("${rcm.mail.from:notifications@rcminsight.com}")
+    @Value("${rcm.mail.from:balakrishnan206k@gmail.com}")
     private String mailFrom;
 
-    @Value("${rcm.mail.default-recipient:balakrishnana206k@gmail.com}")
+    @Value("${rcm.mail.default-recipient:balakrishnan206k@gmail.com}")
     private String defaultRecipient;
 
     @Value("${rcm.mail.enabled:true}")

@@ -91,7 +91,7 @@ export default function ClaimDetailPage() {
   const [sendingEmail, setSendingEmail] = useState(false);
   const [previewEmail, setPreviewEmail] = useState(null);
   const [showCustomEmailModal, setShowCustomEmailModal] = useState(false);
-  const [customEmailTarget, setCustomEmailTarget] = useState('balakrishnana206k@gmail.com');
+  const [customEmailTarget, setCustomEmailTarget] = useState('balakrishnan206k@gmail.com');
 
   const loadClaimData = async () => {
     try {
@@ -104,7 +104,7 @@ export default function ClaimDetailPage() {
       setClaim(cRes.data);
       setHistory(hRes.data || []);
       setEmails(eRes.data || []);
-      setCustomEmailTarget(cRes.data.patientEmail || 'balakrishnana206k@gmail.com');
+      setCustomEmailTarget(cRes.data.patientEmail || 'balakrishnan206k@gmail.com');
       setEditForm({
         patientName: cRes.data.patientName || '',
         patientReference: cRes.data.patientReference || '',
@@ -136,7 +136,7 @@ export default function ClaimDetailPage() {
   const handleSendStageEmail = async (targetEmail = null) => {
     try {
       setSendingEmail(true);
-      const to = targetEmail || claim.patientEmail || 'balakrishnana206k@gmail.com';
+      const to = targetEmail || claim.patientEmail || 'balakrishnan206k@gmail.com';
       await sendClaimStageEmail(claim.claimId, to);
       showNotification(`Process Lifecycle Stage progress email successfully sent to ${to}!`);
       const eRes = await getClaimEmails(claim.claimId);
@@ -843,7 +843,7 @@ export default function ClaimDetailPage() {
                   gap: '0.35rem'
                 }}>
                   <Mail size={12} />
-                  {claim.patientEmail || 'balakrishnana206k@gmail.com'}
+                  {claim.patientEmail || 'balakrishnan206k@gmail.com'}
                 </span>
 
                 <button
@@ -875,7 +875,7 @@ export default function ClaimDetailPage() {
                 <Mail size={28} color="#94a3b8" style={{ marginBottom: '0.5rem' }} />
                 <div style={{ fontWeight: '600', fontSize: '0.9rem', color: '#334155' }}>No email dispatches recorded yet</div>
                 <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.25rem' }}>
-                  Click "Send Stage Email Now" above to dispatch the current stage progress report to <strong>{claim.patientEmail || 'balakrishnana206k@gmail.com'}</strong>.
+                  Click "Send Stage Email Now" above to dispatch the current stage progress report to <strong>{claim.patientEmail || 'balakrishnan206k@gmail.com'}</strong>.
                 </div>
               </div>
             ) : (
@@ -1439,16 +1439,16 @@ export default function ClaimDetailPage() {
                 className="form-control"
                 value={customEmailTarget}
                 onChange={(e) => setCustomEmailTarget(e.target.value)}
-                placeholder="balakrishnana206k@gmail.com"
+                placeholder="balakrishnan206k@gmail.com"
                 required
               />
               <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.4rem' }}>
                 <button
                   type="button"
-                  onClick={() => setCustomEmailTarget('balakrishnana206k@gmail.com')}
+                  onClick={() => setCustomEmailTarget('balakrishnan206k@gmail.com')}
                   style={{ fontSize: '0.72rem', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', borderRadius: '4px', padding: '0.15rem 0.4rem', cursor: 'pointer' }}
                 >
-                  ⚡ balakrishnana206k@gmail.com
+                  ⚡ balakrishnan206k@gmail.com
                 </button>
               </div>
             </div>
