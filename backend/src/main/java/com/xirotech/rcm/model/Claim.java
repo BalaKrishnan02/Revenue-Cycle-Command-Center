@@ -29,6 +29,7 @@ public class Claim {
 
     private String patientName;
     private String patientReference;
+    private String patientEmail;
 
     // Insurance Company Details
     @Indexed

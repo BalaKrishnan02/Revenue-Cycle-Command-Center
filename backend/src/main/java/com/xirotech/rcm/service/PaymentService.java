@@ -31,6 +31,7 @@ public class PaymentService {
     private final LiveUpdateService liveUpdateService;
     private final BillingPriorityService billingPriorityService;
     private final ArAgingService arAgingService;
+    private final LifecycleEmailService lifecycleEmailService;
 
     public List<Payment> getAllPayments() {
         UserPrincipal user = SecurityUtils.getCurrentUser();
@@ -132,6 +133,14 @@ public class PaymentService {
 
         liveUpdateService.broadcastUpdate("PAYMENT_PROCESSED", savedPayment);
         liveUpdateService.broadcastUpdate("CLAIM_UPDATED", updatedClaim);
+
+        // Dispatch Stage 5: Payment Remittance / Settlement progress email to patient/user
+        lifecycleEmailService.sendStageProgressEmail(
+                updatedClaim,
+                5,
+                newPending <= 0.001 ? "Stage 5: Final Payment Settlement Disbursed" : "Stage 5: Payment Remittance Recorded (Partial)",
+                histDesc
+        );
 
         return savedPayment;
     }

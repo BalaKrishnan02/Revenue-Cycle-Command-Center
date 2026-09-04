@@ -4,10 +4,12 @@ import com.xirotech.rcm.dto.ClaimRequest;
 import com.xirotech.rcm.dto.ClaimReviewRequest;
 import com.xirotech.rcm.dto.PaymentRequest;
 import com.xirotech.rcm.model.Claim;
+import com.xirotech.rcm.model.ClaimEmailNotification;
 import com.xirotech.rcm.model.ClaimHistory;
 import com.xirotech.rcm.model.Payment;
 import com.xirotech.rcm.service.BillingPriorityService;
 import com.xirotech.rcm.service.ClaimService;
+import com.xirotech.rcm.service.LifecycleEmailService;
 import com.xirotech.rcm.service.PaymentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,7 @@ public class ClaimController {
     private final ClaimService claimService;
     private final PaymentService paymentService;
     private final BillingPriorityService billingPriorityService;
+    private final LifecycleEmailService lifecycleEmailService;
 
     @GetMapping("/api/claims")
     public ResponseEntity<List<Claim>> getAllClaims() {
@@ -121,4 +124,20 @@ public class ClaimController {
         String notes = (body != null && body.containsKey("notes")) ? body.get("notes") : "Followed up with payer regarding pending bill.";
         return ResponseEntity.ok(claimService.recordFollowUp(id, notes));
     }
+
+    @GetMapping("/api/claims/{id}/emails")
+    public ResponseEntity<List<ClaimEmailNotification>> getClaimEmails(@PathVariable String id) {
+        Claim claim = claimService.getClaimById(id);
+        return ResponseEntity.ok(lifecycleEmailService.getEmailsForClaim(claim.getClaimId()));
+    }
+
+    @PostMapping("/api/claims/{id}/send-stage-email")
+    public ResponseEntity<ClaimEmailNotification> sendStageEmail(
+            @PathVariable String id,
+            @RequestBody(required = false) Map<String, String> body) {
+        Claim claim = claimService.getClaimById(id);
+        String recipient = (body != null && body.containsKey("email")) ? body.get("email") : null;
+        return ResponseEntity.ok(lifecycleEmailService.triggerManualStageEmail(claim, recipient));
+    }
 }
+

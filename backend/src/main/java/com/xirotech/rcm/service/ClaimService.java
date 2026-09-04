@@ -39,6 +39,7 @@ public class ClaimService {
     private final LiveUpdateService liveUpdateService;
     private final BillingPriorityService billingPriorityService;
     private final ArAgingService arAgingService;
+    private final LifecycleEmailService lifecycleEmailService;
 
     public List<Claim> getAllClaims() {
         UserPrincipal user = SecurityUtils.getCurrentUser();
@@ -51,7 +52,7 @@ public class ClaimService {
     }
 
     public Claim getClaimById(String idOrClaimId) {
-        Claim claim = claimRepository.findByClaimId(idOrClaimId)
+        Claim claim = claimRepository.findFirstByClaimId(idOrClaimId)
                 .or(() -> claimRepository.findById(idOrClaimId))
                 .orElseThrow(() -> new ResourceNotFoundException("Claim not found with id or claimId: " + idOrClaimId));
 
@@ -100,6 +101,7 @@ public class ClaimService {
             claim = existing.get();
             claim.setPatientName(request.getPatientName());
             claim.setPatientReference(patientRef);
+            claim.setPatientEmail(request.getPatientEmail());
             claim.setInsuranceCompanyId(resolvedCompanyId);
             claim.setInsuranceCompanyName(resolvedCompanyName);
             claim.setPayerName(resolvedCompanyName);
@@ -123,6 +125,7 @@ public class ClaimService {
                     .claimId(generatedClaimId)
                     .patientName(request.getPatientName())
                     .patientReference(patientRef)
+                    .patientEmail(request.getPatientEmail())
                     .insuranceCompanyId(resolvedCompanyId)
                     .insuranceCompanyName(resolvedCompanyName)
                     .payerName(resolvedCompanyName)
@@ -151,6 +154,15 @@ public class ClaimService {
 
         logHistory(saved.getClaimId(), null, "CREATED", "Claim created in billing system for " + resolvedCompanyName + ". Bill Amount: ₹" + String.format("%,.0f", billAmount));
         liveUpdateService.broadcastUpdate("CLAIM_CREATED", saved);
+
+        // Dispatch Stage 1: Claim Intake & Registration progress email to patient/user
+        lifecycleEmailService.sendStageProgressEmail(
+                saved,
+                1,
+                "Stage 1: Claim Intake & Registration Complete",
+                "Claim successfully registered with " + resolvedCompanyName + ". Initial bill amount: ₹" +
+                        String.format("%,.0f", billAmount) + ". Next milestone: AI Pre-Audit & Risk Analysis."
+        );
 
         return saved;
     }
@@ -236,6 +248,16 @@ public class ClaimService {
         }
 
         liveUpdateService.broadcastUpdate("CLAIM_PREDICTED", updated);
+
+        // Dispatch Stage 2: AI Pre-Audit Analysis Complete progress email to patient/user
+        lifecycleEmailService.sendStageProgressEmail(
+                updated,
+                2,
+                "Stage 2: AI Pre-Audit Analysis Complete",
+                "AI pre-submission audit completed with estimated denial risk of " + response.getRiskScore() +
+                        "% (" + response.getRiskLevel() + " Risk). Recommendation: " + updated.getRecommendation()
+        );
+
         return updated;
     }
 
@@ -244,6 +266,7 @@ public class ClaimService {
         String oldStatus = claim.getStatus();
 
         if (request.getPatientName() != null) claim.setPatientName(request.getPatientName());
+        if (request.getPatientEmail() != null) claim.setPatientEmail(request.getPatientEmail());
         if (request.getPayerName() != null) claim.setPayerName(request.getPayerName());
         if (request.getPayerType() != null) claim.setPayerType(request.getPayerType());
         if (request.getClaimAmount() != null && request.getClaimAmount() > 0) {
@@ -315,6 +338,16 @@ public class ClaimService {
         }
 
         liveUpdateService.broadcastUpdate("CLAIM_SUBMITTED", finalClaim);
+
+        // Dispatch Stage 3: Electronic EDI 837 Submission progress email to patient/user
+        lifecycleEmailService.sendStageProgressEmail(
+                finalClaim,
+                3,
+                "Stage 3: Electronic EDI 837 Submission Dispatched",
+                "Claim electronically transmitted to " + finalClaim.getPayerName() +
+                        ". Payer adjudication pipeline initiated with initial status: " + finalClaim.getStatus() + "."
+        );
+
         return finalClaim;
     }
 
@@ -348,6 +381,15 @@ public class ClaimService {
         }
 
         liveUpdateService.broadcastUpdate("CLAIM_RESUBMITTED", finalClaim);
+
+        // Dispatch Stage 3: EDI 837 Resubmission progress email to patient/user
+        lifecycleEmailService.sendStageProgressEmail(
+                finalClaim,
+                3,
+                "Stage 3: EDI 837 Resubmission Dispatched",
+                "Corrected claim resubmitted to payer " + finalClaim.getPayerName() + " for secondary review."
+        );
+
         return finalClaim;
     }
 
@@ -367,6 +409,15 @@ public class ClaimService {
                 claim.getClaimId() + " successfully approved.");
 
         liveUpdateService.broadcastUpdate("CLAIM_UPDATED", updated);
+
+        // Dispatch Stage 4: Adjudication Decision email to patient/user
+        lifecycleEmailService.sendStageProgressEmail(
+                updated,
+                4,
+                "Stage 4: Payer Adjudication (ACCEPTED)",
+                "Claim approved by " + updated.getPayerName() + ". Ready for financial reimbursement and settlement disbursement."
+        );
+
         return updated;
     }
 
@@ -390,6 +441,15 @@ public class ClaimService {
                 claim.getClaimId() + " was denied: " + reason);
 
         liveUpdateService.broadcastUpdate("CLAIM_UPDATED", updated);
+
+        // Dispatch Stage 4: Adjudication Denial email to patient/user
+        lifecycleEmailService.sendStageProgressEmail(
+                updated,
+                4,
+                "Stage 4: Payer Adjudication (DENIED)",
+                "Claim denial issued by " + updated.getPayerName() + ". Denial reason: " + reason
+        );
+
         return updated;
     }
 
@@ -485,6 +545,18 @@ public class ClaimService {
         );
 
         liveUpdateService.broadcastUpdate("CLAIM_UPDATED", updated);
+
+        // Dispatch Stage 4: Payer Adjudication Review decision email to patient/user
+        lifecycleEmailService.sendStageProgressEmail(
+                updated,
+                4,
+                "Stage 4: Payer Adjudication Review (" + newStatus + ")",
+                "Payer " + (updated.getInsuranceCompanyName() != null ? updated.getInsuranceCompanyName() : "Insurance Company") +
+                        " completed adjudication review with status: " + newStatus +
+                        (updated.getDenialReason() != null ? ". Reason: " + updated.getDenialReason() : "") +
+                        (updated.getAllowedAmount() > 0 ? ". Allowed Settlement: ₹" + String.format("%,.0f", updated.getAllowedAmount()) : "")
+        );
+
         return updated;
     }
 

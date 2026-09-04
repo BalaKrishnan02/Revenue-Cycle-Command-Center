@@ -410,6 +410,17 @@ export const recordPartialPayment = async (id, paymentData = {}) => {
 
 export const recordFollowUp = (id, notes = '') => api.post(`/claims/${id}/follow-up`, { notes });
 
+// Lifecycle Email Notifications
+export const getClaimEmails = (id) =>
+  safeRequest(
+    () => api.get(`/claims/${id}/emails`),
+    () => []
+  );
+
+export const sendClaimStageEmail = (id, email = '') =>
+  api.post(`/claims/${id}/send-stage-email`, email ? { email } : {});
+
+
 // Alerts
 export const getAlerts = (companyId = '') =>
   safeRequest(

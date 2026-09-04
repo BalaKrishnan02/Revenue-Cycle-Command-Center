@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   Building,
   User,
+  Mail,
   DollarSign,
   ArrowRight
 } from 'lucide-react';
@@ -22,6 +23,7 @@ export default function CreateClaimPage() {
     claimId: '',
     patientName: '',
     patientReference: '',
+    patientEmail: 'balakrishnana206k@gmail.com',
     payerName: 'Nova Health Insurance',
     payerType: 'PRIVATE',
     claimAmount: 25000,
@@ -110,6 +112,7 @@ export default function CreateClaimPage() {
       claimId: 'CLM2055',
       patientName: 'Demo Patient',
       patientReference: 'PT-2055',
+      patientEmail: 'balakrishnana206k@gmail.com',
       payerName: 'Nova Health Insurance',
       payerType: 'PRIVATE',
       claimAmount: 25000,
@@ -126,6 +129,7 @@ export default function CreateClaimPage() {
       claimId: 'CLM2056',
       patientName: 'Demo Patient 2',
       patientReference: 'PT-2056',
+      patientEmail: 'balakrishnana206k@gmail.com',
       payerName: 'Nova Health Insurance',
       payerType: 'PRIVATE',
       claimAmount: 32000,
@@ -169,7 +173,7 @@ export default function CreateClaimPage() {
             1. Patient & Claim Identification
           </h3>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.25rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
             <div className="form-group">
               <label className="form-label">Claim ID (Optional / Auto)</label>
               <input
@@ -208,6 +212,43 @@ export default function CreateClaimPage() {
                 value={formData.patientReference}
                 onChange={handleChange}
               />
+            </div>
+
+            <div className="form-group">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: 0 }}>
+                  <Mail size={14} color="#2563eb" />
+                  Patient / User Email Address
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setFormData((p) => ({ ...p, patientEmail: 'balakrishnana206k@gmail.com' }))}
+                  style={{
+                    background: '#eff6ff',
+                    border: '1px solid #bfdbfe',
+                    color: '#1d4ed8',
+                    fontSize: '0.7rem',
+                    fontWeight: '600',
+                    padding: '0.15rem 0.5rem',
+                    borderRadius: '9999px',
+                    cursor: 'pointer'
+                  }}
+                  title="Click to fill balakrishnana206k@gmail.com"
+                >
+                  ⚡ My Email
+                </button>
+              </div>
+              <input
+                type="email"
+                name="patientEmail"
+                className="form-control"
+                placeholder="balakrishnana206k@gmail.com"
+                value={formData.patientEmail}
+                onChange={handleChange}
+              />
+              <span style={{ fontSize: '0.73rem', color: '#2563eb', display: 'block', marginTop: '0.25rem' }}>
+                📬 <strong>Process Lifecycle Progress:</strong> Automatic updates sent at each stage (Intake → AI Audit → Submission → Adjudication → Settlement)
+              </span>
             </div>
           </div>
         </div>

@@ -20,6 +20,7 @@ public class ClaimRequest {
     private String patientName;
 
     private String patientReference;
+    private String patientEmail;
 
     @NotBlank(message = "Payer name is required")
     private String payerName;

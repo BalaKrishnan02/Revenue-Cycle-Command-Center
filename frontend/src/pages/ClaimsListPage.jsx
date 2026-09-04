@@ -12,13 +12,17 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
-  DollarSign
+  DollarSign,
+  Lock,
+  Building2
 } from 'lucide-react';
 import { getClaims } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import RiskMeter from '../components/RiskMeter';
 
 export default function ClaimsListPage() {
+  const { user, isInsuranceCompany, isRcmAdmin } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const initialFilter = searchParams.get('filter') || 'ALL';
 
@@ -31,7 +35,7 @@ export default function ClaimsListPage() {
     try {
       setLoading(true);
       const res = await getClaims();
-      setClaims(res.data);
+      setClaims(res.data || []);
     } catch (err) {
       console.error('Error loading claims:', err);
     } finally {
@@ -80,12 +84,33 @@ export default function ClaimsListPage() {
       {/* Top Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--navy-dark)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <FileText size={24} color="#2563eb" />
-            Claims Command Repository
-          </h2>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            Full lifecycle monitoring, AI denial audits, and real-time payer status tracking
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.25rem' }}>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--navy-dark)', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+              <FileText size={24} color="#2563eb" />
+              {isInsuranceCompany() ? 'Assigned Claims Adjudication Repository' : 'Claims Command Repository'}
+            </h2>
+            {isInsuranceCompany() && (
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                fontSize: '0.72rem',
+                fontWeight: '700',
+                padding: '0.2rem 0.65rem',
+                borderRadius: '9999px',
+                background: '#ecfdf5',
+                color: '#065f46',
+                border: '1px solid #a7f3d0'
+              }}>
+                <Lock size={12} />
+                PAYER: {user?.insuranceCompanyName || user?.companyId}
+              </span>
+            )}
+          </div>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
+            {isInsuranceCompany()
+              ? `Adjudicate, review, approve or deny claims assigned to ${user?.insuranceCompanyName || 'your organization'}`
+              : 'Full lifecycle monitoring, AI denial audits, and real-time payer status tracking'}
           </p>
         </div>
 
@@ -94,10 +119,12 @@ export default function ClaimsListPage() {
             <RefreshCw size={14} className={loading ? 'spin' : ''} />
             <span>Sync</span>
           </button>
-          <Link to="/create-claim" className="btn btn-primary btn-sm">
-            <Plus size={16} />
-            <span>New Claim</span>
-          </Link>
+          {!isInsuranceCompany() && (
+            <Link to="/create-claim" className="btn btn-primary btn-sm">
+              <Plus size={16} />
+              <span>New Claim</span>
+            </Link>
+          )}
         </div>
       </div>
 

@@ -15,11 +15,14 @@ import {
   ShieldCheck,
   Building,
   User,
+  Mail,
   CheckCircle,
   HelpCircle,
   Sliders,
   Flame,
-  Coins
+  Coins,
+  FileCheck2,
+  FileWarning
 } from 'lucide-react';
 import {
   getClaim,
@@ -33,8 +36,12 @@ import {
   setPendingClaim,
   payClaim,
   recordPartialPayment,
-  recordFollowUp
+  recordFollowUp,
+  reviewClaim,
+  getClaimEmails,
+  sendClaimStageEmail
 } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import RiskMeter from '../components/RiskMeter';
 import ClaimTimeline from '../components/ClaimTimeline';
@@ -42,6 +49,7 @@ import ClaimTimeline from '../components/ClaimTimeline';
 export default function ClaimDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user, isInsuranceCompany, isRcmAdmin } = useAuth();
 
   const [claim, setClaim] = useState(null);
   const [history, setHistory] = useState([]);
@@ -57,6 +65,8 @@ export default function ClaimDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({
     patientName: '',
+    patientReference: '',
+    patientEmail: '',
     payerName: '',
     claimAmount: 0,
     eligibilityVerified: true,
@@ -66,24 +76,46 @@ export default function ClaimDetailPage() {
     previousDenials: 0
   });
 
+  // Payer Adjudication Modal State
+  const [showAdjudicateModal, setShowAdjudicateModal] = useState(false);
+  const [adjudicateForm, setAdjudicateForm] = useState({
+    status: 'ACCEPTED',
+    allowedAmount: '',
+    denialReason: 'Prior Authorization Absent: Pre-auth required for surgical procedure code 99214',
+    customReason: '',
+    comments: ''
+  });
+
+  // Lifecycle Email Notifications State
+  const [emails, setEmails] = useState([]);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [previewEmail, setPreviewEmail] = useState(null);
+  const [showCustomEmailModal, setShowCustomEmailModal] = useState(false);
+  const [customEmailTarget, setCustomEmailTarget] = useState('balakrishnana206k@gmail.com');
+
   const loadClaimData = async () => {
     try {
       setLoading(true);
-      const [cRes, hRes] = await Promise.all([
+      const [cRes, hRes, eRes] = await Promise.all([
         getClaim(id),
-        getClaimHistory(id)
+        getClaimHistory(id),
+        getClaimEmails(id)
       ]);
       setClaim(cRes.data);
-      setHistory(hRes.data);
+      setHistory(hRes.data || []);
+      setEmails(eRes.data || []);
+      setCustomEmailTarget(cRes.data.patientEmail || 'balakrishnana206k@gmail.com');
       setEditForm({
-        patientName: cRes.data.patientName,
-        payerName: cRes.data.payerName,
-        claimAmount: cRes.data.totalBillAmount || cRes.data.claimAmount,
-        eligibilityVerified: cRes.data.eligibilityVerified,
-        authorizationAvailable: cRes.data.authorizationAvailable,
-        codingComplete: cRes.data.codingComplete,
-        documentationComplete: cRes.data.documentationComplete,
-        previousDenials: cRes.data.previousDenials
+        patientName: cRes.data.patientName || '',
+        patientReference: cRes.data.patientReference || '',
+        patientEmail: cRes.data.patientEmail || '',
+        payerName: cRes.data.payerName || '',
+        claimAmount: cRes.data.totalBillAmount || cRes.data.claimAmount || 0,
+        eligibilityVerified: !!cRes.data.eligibilityVerified,
+        authorizationAvailable: !!cRes.data.authorizationAvailable,
+        codingComplete: !!cRes.data.codingComplete,
+        documentationComplete: !!cRes.data.documentationComplete,
+        previousDenials: cRes.data.previousDenials || 0
       });
     } catch (err) {
       console.error('Error fetching claim:', err);
@@ -101,6 +133,23 @@ export default function ClaimDetailPage() {
     setTimeout(() => setMessage(null), 5000);
   };
 
+  const handleSendStageEmail = async (targetEmail = null) => {
+    try {
+      setSendingEmail(true);
+      const to = targetEmail || claim.patientEmail || 'balakrishnana206k@gmail.com';
+      await sendClaimStageEmail(claim.claimId, to);
+      showNotification(`Process Lifecycle Stage progress email successfully sent to ${to}!`);
+      const eRes = await getClaimEmails(claim.claimId);
+      setEmails(eRes.data || []);
+      setShowCustomEmailModal(false);
+    } catch (err) {
+      console.error(err);
+      showNotification('Failed to dispatch lifecycle stage email', 'danger');
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
   // Actions
   const handlePredict = async () => {
     try {
@@ -108,7 +157,7 @@ export default function ClaimDetailPage() {
       const res = await predictClaimRisk(claim.claimId);
       setClaim(res.data);
       const hRes = await getClaimHistory(claim.claimId);
-      setHistory(hRes.data);
+      setHistory(hRes.data || []);
       showNotification(`AI Check Complete: ${res.data.riskScore}% (${res.data.riskLevel} Risk)`);
     } catch (err) {
       console.error(err);
@@ -124,7 +173,7 @@ export default function ClaimDetailPage() {
       const res = await submitClaim(claim.claimId);
       setClaim(res.data);
       const hRes = await getClaimHistory(claim.claimId);
-      setHistory(hRes.data);
+      setHistory(hRes.data || []);
       if (res.data.status === 'ACCEPTED') {
         showNotification('Claim successfully submitted & ACCEPTED by payer!');
       } else if (res.data.status === 'DENIED') {
@@ -146,57 +195,11 @@ export default function ClaimDetailPage() {
       const res = await resubmitClaim(claim.claimId);
       setClaim(res.data);
       const hRes = await getClaimHistory(claim.claimId);
-      setHistory(hRes.data);
+      setHistory(hRes.data || []);
       showNotification('Corrected claim resubmitted successfully!');
     } catch (err) {
       console.error(err);
       showNotification('Error resubmitting claim', 'danger');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleAcceptManual = async () => {
-    try {
-      setActionLoading(true);
-      const res = await acceptClaim(claim.claimId);
-      setClaim(res.data);
-      const hRes = await getClaimHistory(claim.claimId);
-      setHistory(hRes.data);
-      showNotification('Simulated Payer Acceptance recorded.');
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleDenyManual = async () => {
-    try {
-      setActionLoading(true);
-      const reason = prompt('Enter denial reason:', 'Eligibility verification missing') || 'Eligibility Issue';
-      const res = await denyClaim(claim.claimId, reason);
-      setClaim(res.data);
-      const hRes = await getClaimHistory(claim.claimId);
-      setHistory(hRes.data);
-      showNotification(`Claim marked as DENIED: ${reason}`, 'danger');
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleSetPending = async () => {
-    try {
-      setActionLoading(true);
-      const res = await setPendingClaim(claim.claimId);
-      setClaim(res.data);
-      const hRes = await getClaimHistory(claim.claimId);
-      setHistory(hRes.data);
-      showNotification('Claim status changed to PENDING.');
-    } catch (err) {
-      console.error(err);
     } finally {
       setActionLoading(false);
     }
@@ -250,14 +253,74 @@ export default function ClaimDetailPage() {
       setClaim(res.data);
       setShowEditModal(false);
       const hRes = await getClaimHistory(claim.claimId);
-      setHistory(hRes.data);
-      showNotification('Claim updated & corrected! Ready to re-check risk.');
+      setHistory(hRes.data || []);
+      showNotification('Claim corrections saved successfully! Status updated to CORRECTED.');
     } catch (err) {
       console.error(err);
       showNotification('Error updating claim', 'danger');
     } finally {
       setActionLoading(false);
     }
+  };
+
+  // Payer Adjudication Submit
+  const handleAdjudicateSubmit = async (e) => {
+    if (e) e.preventDefault();
+    try {
+      setActionLoading(true);
+      const isDeny = adjudicateForm.status === 'DENIED';
+      const reason = isDeny
+        ? (adjudicateForm.denialReason === 'CUSTOM' ? adjudicateForm.customReason : adjudicateForm.denialReason)
+        : null;
+      const allowed = adjudicateForm.status === 'ACCEPTED'
+        ? Number(adjudicateForm.allowedAmount || claim.totalBillAmount || claim.claimAmount)
+        : 0;
+
+      const reviewData = {
+        status: adjudicateForm.status,
+        allowedAmount: allowed,
+        denialReason: reason,
+        comments: adjudicateForm.comments || 'Payer adjudication determination recorded.',
+        paymentStatus: adjudicateForm.status === 'ACCEPTED' ? 'PENDING' : (isDeny ? 'UNPAID' : claim.paymentStatus)
+      };
+
+      const res = await reviewClaim(claim.claimId, reviewData);
+      setClaim(res.data);
+      setShowAdjudicateModal(false);
+      const hRes = await getClaimHistory(claim.claimId);
+      setHistory(hRes.data || []);
+      showNotification(
+        `Adjudication completed: Claim is now ${adjudicateForm.status}!`,
+        adjudicateForm.status === 'DENIED' ? 'warning' : 'success'
+      );
+    } catch (err) {
+      console.error('Error adjudicating claim:', err);
+      showNotification('Error recording claim adjudication.', 'danger');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleQuickApprove = () => {
+    setAdjudicateForm({
+      status: 'ACCEPTED',
+      allowedAmount: claim.totalBillAmount || claim.claimAmount,
+      denialReason: '',
+      customReason: '',
+      comments: 'Adjudicated & approved by insurance payer reviewer.'
+    });
+    setShowAdjudicateModal(true);
+  };
+
+  const handleQuickDeny = () => {
+    setAdjudicateForm({
+      status: 'DENIED',
+      allowedAmount: 0,
+      denialReason: 'Prior Authorization Absent: Pre-auth required for surgical procedure code 99214',
+      customReason: '',
+      comments: 'Claim denied due to missing pre-authorization documentation.'
+    });
+    setShowAdjudicateModal(true);
   };
 
   if (loading || !claim) {
@@ -298,7 +361,7 @@ export default function ClaimDetailPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <Link to="/claims" className="btn btn-secondary btn-sm">
             <ArrowLeft size={16} />
-            <span>Claims List</span>
+            <span>{isInsuranceCompany() ? 'Assigned Claims' : 'Claims List'}</span>
           </Link>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
@@ -315,75 +378,151 @@ export default function ClaimDetailPage() {
           </div>
         </div>
 
-        {/* Quick Lifecycle Action Group */}
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          {/* 1. Run AI Check */}
-          <button
-            onClick={handlePredict}
-            disabled={actionLoading}
-            className="btn btn-primary"
-            style={{ background: 'linear-gradient(135deg, #2563eb, #7c3aed)' }}
-            title="Evaluate denial probability with Random Forest Model"
-          >
-            <Sparkles size={16} />
-            <span>Check Denial Risk (AI)</span>
-          </button>
+        {/* Action Group: Tailored for Insurance Company vs RCM Admin */}
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          {isInsuranceCompany() ? (
+            /* Insurance Company Adjudicator Actions */
+            <>
+              <button
+                onClick={() => {
+                  setAdjudicateForm({
+                    status: claim.status === 'DENIED' ? 'DENIED' : 'ACCEPTED',
+                    allowedAmount: claim.allowedAmount || claim.totalBillAmount || claim.claimAmount,
+                    denialReason: claim.denialReason || 'Prior Authorization Absent: Pre-auth required for surgical procedure code 99214',
+                    customReason: '',
+                    comments: ''
+                  });
+                  setShowAdjudicateModal(true);
+                }}
+                disabled={actionLoading}
+                className="btn btn-primary"
+                style={{ background: 'linear-gradient(135deg, #059669, #047857)' }}
+              >
+                <Sliders size={15} />
+                <span>Review & Adjudicate</span>
+              </button>
 
-          {/* 2. Correct / Edit */}
-          <button
-            onClick={() => setShowEditModal(true)}
-            disabled={actionLoading}
-            className="btn btn-secondary"
-          >
-            <Edit3 size={16} />
-            <span>Edit / Correct</span>
-          </button>
+              {claim.status !== 'ACCEPTED' && claim.status !== 'PAID' && (
+                <button
+                  onClick={handleQuickApprove}
+                  disabled={actionLoading}
+                  className="btn btn-success"
+                >
+                  <CheckCircle2 size={15} />
+                  <span>Approve Claim</span>
+                </button>
+              )}
 
-          {/* 3. Partial Payment */}
-          {!isPaid && (
-            <button
-              onClick={() => setShowPartialModal(true)}
-              disabled={actionLoading}
-              className="btn btn-secondary"
-              style={{ borderColor: '#93c5fd', color: '#1d4ed8' }}
-            >
-              <Coins size={16} />
-              <span>Partial Payment</span>
-            </button>
-          )}
+              {claim.status !== 'DENIED' && (
+                <button
+                  onClick={handleQuickDeny}
+                  disabled={actionLoading}
+                  className="btn btn-danger"
+                >
+                  <XCircle size={15} />
+                  <span>Issue Denial</span>
+                </button>
+              )}
 
-          {/* 4. Submit / Resubmit */}
-          {isDenied ? (
-            <button
-              onClick={handleResubmit}
-              disabled={actionLoading}
-              className="btn btn-warning"
-            >
-              <RotateCcw size={16} />
-              <span>Resubmit Claim</span>
-            </button>
-          ) : !isAccepted && !isPaid ? (
-            <button
-              onClick={handleSubmit}
-              disabled={actionLoading}
-              className="btn btn-success"
-            >
-              <Send size={16} />
-              <span>Submit to Payer</span>
-            </button>
-          ) : null}
+              {!isPaid && (
+                <button
+                  onClick={handleProcessPayment}
+                  disabled={actionLoading}
+                  className="btn btn-secondary"
+                  style={{ borderColor: '#86efac', color: '#065f46', background: '#f0fdf4' }}
+                >
+                  <DollarSign size={15} />
+                  <span>Settle Full Balance</span>
+                </button>
+              )}
+            </>
+          ) : (
+            /* RCM Admin Hospital Billing Actions */
+            <>
+              <button
+                onClick={handlePredict}
+                disabled={actionLoading}
+                className="btn btn-primary"
+                style={{ background: 'linear-gradient(135deg, #2563eb, #7c3aed)' }}
+                title="Evaluate denial probability with Random Forest Model"
+              >
+                <Sparkles size={16} />
+                <span>Check Denial Risk (AI)</span>
+              </button>
 
-          {/* 5. Process Full Payment */}
-          {!isPaid && (
-            <button
-              onClick={handleProcessPayment}
-              disabled={actionLoading}
-              className="btn btn-success"
-              style={{ background: '#059669', boxShadow: '0 4px 14px rgba(5, 150, 105, 0.4)' }}
-            >
-              <DollarSign size={16} />
-              <span>Settle Full Balance (₹{(claim.pendingAmount || claim.totalBillAmount || claim.claimAmount)?.toLocaleString()})</span>
-            </button>
+              <button
+                onClick={() => setShowEditModal(true)}
+                disabled={actionLoading}
+                className="btn btn-secondary"
+              >
+                <Edit3 size={16} />
+                <span>Edit / Correct</span>
+              </button>
+
+              {!isPaid && (
+                <button
+                  onClick={() => setShowPartialModal(true)}
+                  disabled={actionLoading}
+                  className="btn btn-secondary"
+                  style={{ borderColor: '#93c5fd', color: '#1d4ed8' }}
+                >
+                  <Coins size={16} />
+                  <span>Partial Payment</span>
+                </button>
+              )}
+
+              {isDenied ? (
+                <button
+                  onClick={handleResubmit}
+                  disabled={actionLoading}
+                  className="btn btn-warning"
+                >
+                  <RotateCcw size={16} />
+                  <span>Resubmit Claim</span>
+                </button>
+              ) : !isAccepted && !isPaid ? (
+                <button
+                  onClick={handleSubmit}
+                  disabled={actionLoading}
+                  className="btn btn-success"
+                >
+                  <Send size={16} />
+                  <span>Submit to Payer</span>
+                </button>
+              ) : null}
+
+              {!isPaid && (
+                <button
+                  onClick={handleProcessPayment}
+                  disabled={actionLoading}
+                  className="btn btn-success"
+                  style={{ background: '#059669', boxShadow: '0 4px 14px rgba(5, 150, 105, 0.4)' }}
+                >
+                  <DollarSign size={16} />
+                  <span>Settle Full Balance</span>
+                </button>
+              )}
+
+              {/* Admin Adjudication Override Button */}
+              <button
+                onClick={() => {
+                  setAdjudicateForm({
+                    status: claim.status === 'DENIED' ? 'DENIED' : 'ACCEPTED',
+                    allowedAmount: claim.allowedAmount || claim.totalBillAmount || claim.claimAmount,
+                    denialReason: claim.denialReason || 'Prior Authorization Absent: Pre-auth required for surgical procedure code 99214',
+                    customReason: '',
+                    comments: ''
+                  });
+                  setShowAdjudicateModal(true);
+                }}
+                disabled={actionLoading}
+                className="btn btn-secondary btn-sm"
+                title="Simulate or override payer adjudication"
+              >
+                <Sliders size={14} />
+                <span>Payer Adjudication</span>
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -411,13 +550,15 @@ export default function ClaimDetailPage() {
               <strong>Denial Reason:</strong> {claim.denialReason || 'General Policy Ineligibility'}
             </p>
           </div>
-          <button
-            onClick={() => setShowEditModal(true)}
-            className="btn btn-danger"
-          >
-            <RotateCcw size={16} />
-            <span>Correct & Resubmit</span>
-          </button>
+          {isRcmAdmin() && (
+            <button
+              onClick={() => setShowEditModal(true)}
+              className="btn btn-danger"
+            >
+              <RotateCcw size={16} />
+              <span>Correct & Resubmit</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -427,7 +568,7 @@ export default function ClaimDetailPage() {
         {/* Left Column: Claim Financial Details & Priority */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           
-          {/* Billing Priority & Financial Status Card (NEW) */}
+          {/* Billing Priority & Financial Status Card */}
           <div className="card" style={{ border: '2px solid #fed7aa', backgroundColor: '#fffbf7' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
               <h3 className="card-title" style={{ margin: 0, color: '#9a3412', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -453,7 +594,7 @@ export default function ClaimDetailPage() {
               </div>
 
               <div style={{ background: '#ffffff', padding: '0.75rem', borderRadius: '8px', border: '1px solid #fecaca' }}>
-                <span style={{ fontSize: '0.7rem', color: '#b91c1c', textTransform: 'uppercase', fontWeight: '700' }}>Pending</span>
+                <span style={{ fontSize: '0.7rem', color: '#991b1b', textTransform: 'uppercase', fontWeight: '700' }}>Pending</span>
                 <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#dc2626' }}>
                   ₹{(claim.pendingAmount !== undefined ? claim.pendingAmount : (claim.totalBillAmount || claim.claimAmount))?.toLocaleString()}
                 </div>
@@ -488,6 +629,14 @@ export default function ClaimDetailPage() {
                 <strong className="font-mono">{claim.patientReference}</strong>
               </div>
               <div>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block' }}>
+                  <Mail size={12} style={{ display: 'inline', marginRight: '3px' }} /> Patient Email
+                </span>
+                <strong style={{ color: claim.patientEmail ? '#2563eb' : '#94a3b8', fontSize: '0.85rem' }}>
+                  {claim.patientEmail || 'Not provided'}
+                </strong>
+              </div>
+              <div>
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block' }}>Insurance Payer</span>
                 <strong style={{ color: 'var(--navy-dark)' }}>{claim.payerName}</strong>
                 <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>{claim.payerType}</span>
@@ -510,12 +659,14 @@ export default function ClaimDetailPage() {
                 <ShieldCheck size={18} color="#2563eb" />
                 Pre-Submission Quality Flags
               </h3>
-              <button
-                onClick={() => setShowEditModal(true)}
-                className="btn btn-secondary btn-sm"
-              >
-                <Sliders size={12} /> Toggle
-              </button>
+              {isRcmAdmin() && (
+                <button
+                  onClick={() => setShowEditModal(true)}
+                  className="btn btn-secondary btn-sm"
+                >
+                  <Sliders size={12} /> Toggle
+                </button>
+              )}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -665,8 +816,335 @@ export default function ClaimDetailPage() {
             <ClaimTimeline history={history} currentStatus={claim.status} createdAt={claim.createdAt} />
           </div>
 
+          {/* Process Lifecycle Stage Email Notifications Section */}
+          <div className="card" style={{ marginTop: '1.5rem', border: '1px solid #bfdbfe', background: '#f8fafc' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.85rem', marginBottom: '1rem' }}>
+              <div>
+                <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#1e3a8a' }}>
+                  <Mail size={18} color="#2563eb" />
+                  Process Lifecycle Stage Progress Notifications
+                </h3>
+                <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.2rem' }}>
+                  Real-time milestone alerts dispatched across all 5 lifecycle stages
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{
+                  fontSize: '0.75rem',
+                  fontWeight: '700',
+                  color: '#1d4ed8',
+                  background: '#eff6ff',
+                  border: '1px solid #bfdbfe',
+                  padding: '0.25rem 0.65rem',
+                  borderRadius: '9999px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem'
+                }}>
+                  <Mail size={12} />
+                  {claim.patientEmail || 'balakrishnana206k@gmail.com'}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => handleSendStageEmail()}
+                  disabled={sendingEmail}
+                  className="btn btn-primary btn-sm"
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem' }}
+                >
+                  <Send size={13} />
+                  <span>{sendingEmail ? 'Sending...' : 'Send Stage Email Now'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowCustomEmailModal(true)}
+                  className="btn btn-secondary btn-sm"
+                  style={{ fontSize: '0.8rem' }}
+                  title="Send to another email address"
+                >
+                  Send to Other...
+                </button>
+              </div>
+            </div>
+
+            {/* Email Dispatch History Log */}
+            {emails.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '1.5rem', color: '#64748b', background: '#ffffff', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                <Mail size={28} color="#94a3b8" style={{ marginBottom: '0.5rem' }} />
+                <div style={{ fontWeight: '600', fontSize: '0.9rem', color: '#334155' }}>No email dispatches recorded yet</div>
+                <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.25rem' }}>
+                  Click "Send Stage Email Now" above to dispatch the current stage progress report to <strong>{claim.patientEmail || 'balakrishnana206k@gmail.com'}</strong>.
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {emails.map((em, idx) => (
+                  <div
+                    key={em.id || idx}
+                    style={{
+                      background: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      padding: '0.85rem 1rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '1rem',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '50%',
+                        background: '#eff6ff',
+                        color: '#2563eb',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: '800',
+                        fontSize: '0.78rem',
+                        flexShrink: 0
+                      }}>
+                        S{em.stageIndex || 1}
+                      </div>
+
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: '700', fontSize: '0.85rem', color: '#0f172a' }}>
+                            {em.stageName}
+                          </span>
+                          <span style={{
+                            fontSize: '0.68rem',
+                            fontWeight: '700',
+                            padding: '0.1rem 0.45rem',
+                            borderRadius: '9999px',
+                            background: '#ecfdf5',
+                            color: '#047857',
+                            border: '1px solid #a7f3d0'
+                          }}>
+                            ✓ {em.deliveryStatus || 'DELIVERED'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: '#475569', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', marginTop: '0.15rem' }}>
+                          {em.subject}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.2rem' }}>
+                          Recipient: <strong style={{ color: '#334155' }}>{em.patientEmail}</strong> &bull; {new Date(em.sentAt).toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setPreviewEmail(em)}
+                      className="btn btn-secondary btn-sm"
+                      style={{ flexShrink: 0, fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                    >
+                      <FileText size={12} />
+                      <span>Preview Email</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
+
+      {/* Payer Adjudication Modal */}
+      {showAdjudicateModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 100,
+          padding: '1rem'
+        }}>
+          <div style={{ background: '#ffffff', borderRadius: '16px', maxWidth: '540px', width: '100%', padding: '2rem', boxShadow: 'var(--shadow-xl)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: '800', margin: 0, color: 'var(--navy-dark)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Sliders size={20} color="#2563eb" />
+                Payer Adjudication Determination
+              </h3>
+              <button onClick={() => setShowAdjudicateModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.25rem', color: '#64748b' }}>
+                ✕
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
+              Claim: <strong className="font-mono">{claim.claimId}</strong> • Patient: <strong>{claim.patientName}</strong> • Bill: <strong>₹{(claim.totalBillAmount || claim.claimAmount)?.toLocaleString()}</strong>
+            </p>
+
+            <form onSubmit={handleAdjudicateSubmit}>
+              {/* Adjudication Status Selection */}
+              <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                <label className="form-label" style={{ fontWeight: '700' }}>Adjudication Decision *</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setAdjudicateForm((p) => ({ ...p, status: 'ACCEPTED', allowedAmount: claim.totalBillAmount || claim.claimAmount }))}
+                    style={{
+                      padding: '0.65rem 0.5rem',
+                      borderRadius: '8px',
+                      border: adjudicateForm.status === 'ACCEPTED' ? '2px solid #059669' : '1px solid #e2e8f0',
+                      background: adjudicateForm.status === 'ACCEPTED' ? '#ecfdf5' : '#ffffff',
+                      color: adjudicateForm.status === 'ACCEPTED' ? '#065f46' : '#64748b',
+                      fontWeight: '700',
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '0.25rem'
+                    }}
+                  >
+                    <CheckCircle2 size={18} color="#059669" />
+                    <span>Approve</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAdjudicateForm((p) => ({ ...p, status: 'DENIED', allowedAmount: 0 }))}
+                    style={{
+                      padding: '0.65rem 0.5rem',
+                      borderRadius: '8px',
+                      border: adjudicateForm.status === 'DENIED' ? '2px solid #dc2626' : '1px solid #e2e8f0',
+                      background: adjudicateForm.status === 'DENIED' ? '#fef2f2' : '#ffffff',
+                      color: adjudicateForm.status === 'DENIED' ? '#991b1b' : '#64748b',
+                      fontWeight: '700',
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '0.25rem'
+                    }}
+                  >
+                    <XCircle size={18} color="#dc2626" />
+                    <span>Deny</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAdjudicateForm((p) => ({ ...p, status: 'UNDER_REVIEW' }))}
+                    style={{
+                      padding: '0.65rem 0.5rem',
+                      borderRadius: '8px',
+                      border: adjudicateForm.status === 'UNDER_REVIEW' ? '2px solid #d97706' : '1px solid #e2e8f0',
+                      background: adjudicateForm.status === 'UNDER_REVIEW' ? '#fffbeb' : '#ffffff',
+                      color: adjudicateForm.status === 'UNDER_REVIEW' ? '#92400e' : '#64748b',
+                      fontWeight: '700',
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '0.25rem'
+                    }}
+                  >
+                    <Clock size={18} color="#d97706" />
+                    <span>Hold / Review</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* If Accepted: Allowed Amount */}
+              {adjudicateForm.status === 'ACCEPTED' && (
+                <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                  <label className="form-label" style={{ fontWeight: '700' }}>Allowed Settlement Amount (₹) *</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={adjudicateForm.allowedAmount}
+                    onChange={(e) => setAdjudicateForm((p) => ({ ...p, allowedAmount: e.target.value }))}
+                    required
+                  />
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    Total claim bill amount: ₹{(claim.totalBillAmount || claim.claimAmount)?.toLocaleString()}
+                  </span>
+                </div>
+              )}
+
+              {/* If Denied: Denial Reason Selector */}
+              {adjudicateForm.status === 'DENIED' && (
+                <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                  <label className="form-label" style={{ fontWeight: '700' }}>Official Denial Reason *</label>
+                  <select
+                    className="form-control"
+                    value={adjudicateForm.denialReason}
+                    onChange={(e) => setAdjudicateForm((p) => ({ ...p, denialReason: e.target.value }))}
+                    style={{ marginBottom: '0.5rem' }}
+                  >
+                    <option value="Prior Authorization Absent: Pre-auth required for surgical procedure code 99214">
+                      Prior Authorization Absent: Pre-auth required for procedure
+                    </option>
+                    <option value="Eligibility Issue: Coverage expired or inactive on date of service">
+                      Eligibility Issue: Coverage expired or inactive on service date
+                    </option>
+                    <option value="Invalid Coding / CPT Modifier: Consultation code requires modifier -25">
+                      Coding Error: Consultation code requires modifier -25
+                    </option>
+                    <option value="Filing Limit Exceeded: Claim submitted past 90-day adjudication window">
+                      Filing Limit Exceeded: Submitted past payer adjudication window
+                    </option>
+                    <option value="Documentation Deficient: Operative notes missing physician signature">
+                      Documentation Deficient: Operative notes missing required signature
+                    </option>
+                    <option value="CUSTOM">Other / Custom Reason...</option>
+                  </select>
+
+                  {adjudicateForm.denialReason === 'CUSTOM' && (
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Specify custom denial reason..."
+                      value={adjudicateForm.customReason}
+                      onChange={(e) => setAdjudicateForm((p) => ({ ...p, customReason: e.target.value }))}
+                      required
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Reviewer Notes */}
+              <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                <label className="form-label">Adjudication Comments / Notes</label>
+                <textarea
+                  className="form-control"
+                  rows="2"
+                  placeholder="e.g. Coverage verified; prior authorization approved on file."
+                  value={adjudicateForm.comments}
+                  onChange={(e) => setAdjudicateForm((p) => ({ ...p, comments: e.target.value }))}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                <button type="button" onClick={() => setShowAdjudicateModal(false)} className="btn btn-secondary">
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className={adjudicateForm.status === 'DENIED' ? 'btn btn-danger' : 'btn btn-success'}
+                  disabled={actionLoading}
+                >
+                  Confirm Adjudication ({adjudicateForm.status})
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Partial Payment Modal */}
       {showPartialModal && (
@@ -765,12 +1243,31 @@ export default function ClaimDetailPage() {
                   />
                 </div>
                 <div className="form-group">
+                  <label className="form-label">Patient / User Email</label>
+                  <input
+                    type="email"
+                    className="form-control"
+                    placeholder="patient@gmail.com"
+                    value={editForm.patientEmail}
+                    onChange={(e) => setEditForm((p) => ({ ...p, patientEmail: e.target.value }))}
+                  />
+                </div>
+                <div className="form-group">
                   <label className="form-label">Claim Amount (₹)</label>
                   <input
                     type="number"
                     className="form-control"
                     value={editForm.claimAmount}
                     onChange={(e) => setEditForm((p) => ({ ...p, claimAmount: Number(e.target.value) }))}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Patient MRN / Reference</label>
+                  <input
+                    type="text"
+                    className="form-control font-mono"
+                    value={editForm.patientReference}
+                    onChange={(e) => setEditForm((p) => ({ ...p, patientReference: e.target.value }))}
                   />
                 </div>
               </div>
@@ -832,6 +1329,143 @@ export default function ClaimDetailPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Email Preview Modal */}
+      {previewEmail && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 110,
+          padding: '1.5rem'
+        }}>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '16px',
+            maxWidth: '720px',
+            width: '100%',
+            height: '85vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            boxShadow: 'var(--shadow-xl)'
+          }}>
+            {/* Modal Header */}
+            <div style={{ padding: '1.25rem 1.5rem', background: '#0f172a', color: '#ffffff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#38bdf8', fontWeight: '800' }}>
+                  Lifecycle Email Dispatch Preview
+                </div>
+                <div style={{ fontSize: '1rem', fontWeight: '700', color: '#ffffff', marginTop: '0.2rem' }}>
+                  {previewEmail.subject}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+                  To: <span style={{ color: '#f8fafc', fontWeight: '600' }}>{previewEmail.patientEmail}</span> &bull; Status: <span style={{ color: '#4ade80' }}>{previewEmail.deliveryStatus}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setPreviewEmail(null)}
+                style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#ffffff', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontSize: '1.1rem' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Rendered HTML iframe */}
+            <div style={{ flex: 1, background: '#f1f5f9', overflow: 'hidden' }}>
+              <iframe
+                title="Email Preview"
+                srcDoc={previewEmail.htmlBody}
+                style={{ width: '100%', height: '100%', border: 'none' }}
+              />
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ padding: '0.85rem 1.5rem', background: '#ffffff', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                Sent: {new Date(previewEmail.sentAt).toLocaleString()}
+              </span>
+              <button onClick={() => setPreviewEmail(null)} className="btn btn-secondary btn-sm">
+                Close Preview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Send to Custom Email Modal */}
+      {showCustomEmailModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 110,
+          padding: '1rem'
+        }}>
+          <div style={{ background: '#ffffff', borderRadius: '16px', maxWidth: '440px', width: '100%', padding: '1.75rem', boxShadow: 'var(--shadow-xl)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: '800', margin: 0, color: 'var(--navy-dark)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Mail size={18} color="#2563eb" />
+                Dispatch Stage Progress Email
+              </h3>
+              <button onClick={() => setShowCustomEmailModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.25rem', color: '#64748b' }}>
+                ✕
+              </button>
+            </div>
+
+            <p style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '1.25rem' }}>
+              Send an instant report of the current lifecycle progress for claim <strong>{claim.claimId}</strong>.
+            </p>
+
+            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+              <label className="form-label" style={{ fontWeight: '700' }}>Recipient Email Address</label>
+              <input
+                type="email"
+                className="form-control"
+                value={customEmailTarget}
+                onChange={(e) => setCustomEmailTarget(e.target.value)}
+                placeholder="balakrishnana206k@gmail.com"
+                required
+              />
+              <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.4rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setCustomEmailTarget('balakrishnana206k@gmail.com')}
+                  style={{ fontSize: '0.72rem', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8', borderRadius: '4px', padding: '0.15rem 0.4rem', cursor: 'pointer' }}
+                >
+                  ⚡ balakrishnana206k@gmail.com
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+              <button type="button" onClick={() => setShowCustomEmailModal(false)} className="btn btn-secondary">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSendStageEmail(customEmailTarget)}
+                className="btn btn-primary"
+                disabled={sendingEmail || !customEmailTarget}
+              >
+                {sendingEmail ? 'Sending...' : 'Send Notification'}
+              </button>
+            </div>
           </div>
         </div>
       )}
