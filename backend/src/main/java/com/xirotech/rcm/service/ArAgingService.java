@@ -4,6 +4,8 @@ import com.xirotech.rcm.dto.ArAgingSummaryResponse;
 import com.xirotech.rcm.dto.ArFollowUpRequest;
 import com.xirotech.rcm.model.Claim;
 import com.xirotech.rcm.repository.ClaimRepository;
+import com.xirotech.rcm.security.SecurityUtils;
+import com.xirotech.rcm.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,52 +22,68 @@ public class ArAgingService {
 
     private final ClaimRepository claimRepository;
 
+    private boolean matchesCompany(Claim c, UserPrincipal user, String payer) {
+        if (user != null && "INSURANCE_COMPANY".equalsIgnoreCase(user.getRole())) {
+            String coId = user.getCompanyId();
+            String coName = user.getCompanyName();
+            return (c.getInsuranceCompanyId() != null && c.getInsuranceCompanyId().equalsIgnoreCase(coId)) ||
+                    (coName != null && c.getPayerName() != null && c.getPayerName().equalsIgnoreCase(coName));
+        }
+        if (payer == null || payer.isBlank() || payer.equalsIgnoreCase("ALL")) {
+            return true;
+        }
+        return (c.getPayerName() != null && c.getPayerName().equalsIgnoreCase(payer.trim())) ||
+                (c.getInsuranceCompanyName() != null && c.getInsuranceCompanyName().equalsIgnoreCase(payer.trim()));
+    }
+
     /**
      * Calculates and updates AR Aging fields for a claim.
      * Strictly based on pending balance and days outstanding (NOT AI denial risk).
      */
     public void calculateArAging(Claim claim) {
+        if (claim == null) return;
+
         double totalBill = claim.getTotalBillAmount() > 0 ? claim.getTotalBillAmount() : claim.getClaimAmount();
         claim.setTotalBillAmount(totalBill);
         claim.setClaimAmount(totalBill);
 
-        double paid = Math.max(0.0, claim.getPaidAmount());
+        double paid = claim.getPaidAmount();
         claim.setPaidAmount(paid);
 
         double pending = Math.max(0.0, totalBill - paid);
         claim.setPendingAmount(pending);
 
-        // Calculate days pending from claimSubmittedDate or createdAt
+        // Days pending calculation
         int days = claim.getDaysPending();
-        if (claim.getClaimSubmittedDate() != null) {
-            long durationDays = Duration.between(claim.getClaimSubmittedDate(), Instant.now()).toDays();
-            days = Math.max(1, (int) durationDays);
+        if (days <= 0 && claim.getClaimSubmittedDate() != null) {
+            long d = Duration.between(claim.getClaimSubmittedDate(), Instant.now()).toDays();
+            days = (int) Math.max(1, d);
             claim.setDaysPending(days);
         } else if (days <= 0 && claim.getCreatedAt() != null) {
-            long durationDays = Duration.between(claim.getCreatedAt(), Instant.now()).toDays();
-            days = Math.max(1, (int) durationDays);
+            long d = Duration.between(claim.getCreatedAt(), Instant.now()).toDays();
+            days = (int) Math.max(1, d);
             claim.setDaysPending(days);
         } else if (days <= 0) {
             days = 1;
             claim.setDaysPending(days);
         }
 
-        // Check if fully paid
-        if (pending <= 0.001 || "PAID".equalsIgnoreCase(claim.getPaymentStatus())) {
+        // 1. Bucket and Aging Status determination
+        if (pending <= 0.001 || "PAID".equalsIgnoreCase(claim.getStatus()) || "PAID".equalsIgnoreCase(claim.getPaymentStatus())) {
             claim.setPaymentStatus("PAID");
             claim.setAgingBucket("PAID/CLOSED");
             claim.setAgingStatus("RESOLVED");
+            claim.setFollowUpStatus("RESOLVED");
             return;
         }
 
-        // Determine Payment Status
-        if (paid > 0) {
+        if (paid > 0.001) {
             claim.setPaymentStatus("PARTIALLY_PAID");
-        } else if (claim.getPaymentStatus() == null || claim.getPaymentStatus().isBlank() || "PAID".equalsIgnoreCase(claim.getPaymentStatus())) {
-            claim.setPaymentStatus("UNPAID");
+        } else if (claim.getPaymentStatus() == null || claim.getPaymentStatus().isBlank() || "UNPAID".equalsIgnoreCase(claim.getPaymentStatus())) {
+            claim.setPaymentStatus(days > 30 ? "OVERDUE" : "PENDING_PAYER");
         }
 
-        // Assign AR Aging Bucket and Status
+        // Map strictly to standard aging buckets
         if (days <= 30) {
             claim.setAgingBucket("0-30");
             claim.setAgingStatus("MONITOR");
@@ -99,6 +117,7 @@ public class ArAgingService {
      * Optionally filtered by insurance payer and submitted date (YYYY-MM-DD).
      */
     public ArAgingSummaryResponse getArAgingSummary(String payer, String date) {
+        UserPrincipal user = SecurityUtils.getCurrentUser();
         List<Claim> allClaims = claimRepository.findAll();
 
         // Refresh calculations in-memory
@@ -106,11 +125,10 @@ public class ArAgingService {
             calculateArAging(c);
         }
 
-        // Filter active outstanding claims (exclude settled)
+        // Filter active outstanding claims with strict company isolation
         List<Claim> activeClaims = allClaims.stream()
                 .filter(c -> !"PAID/CLOSED".equalsIgnoreCase(c.getAgingBucket()) && c.getPendingAmount() > 0.001)
-                .filter(c -> payer == null || payer.isBlank() || payer.equalsIgnoreCase("ALL") || 
-                        (c.getPayerName() != null && c.getPayerName().equalsIgnoreCase(payer.trim())))
+                .filter(c -> matchesCompany(c, user, payer))
                 .filter(c -> date == null || date.isBlank() || date.equalsIgnoreCase("ALL") || 
                         getClaimDateString(c).equals(date.trim()))
                 .toList();
@@ -175,6 +193,7 @@ public class ArAgingService {
      * Sorted by daysPending DESC, then pendingAmount DESC.
      */
     public List<Claim> getArAgingClaims(String bucket, String payer, String date) {
+        UserPrincipal user = SecurityUtils.getCurrentUser();
         List<Claim> allClaims = claimRepository.findAll();
 
         for (Claim c : allClaims) {
@@ -184,8 +203,7 @@ public class ArAgingService {
         List<Claim> filtered = allClaims.stream()
                 .filter(c -> !"PAID/CLOSED".equalsIgnoreCase(c.getAgingBucket()) && c.getPendingAmount() > 0.001)
                 .filter(c -> bucket == null || bucket.isBlank() || bucket.equalsIgnoreCase("ALL") || bucket.equalsIgnoreCase(c.getAgingBucket()))
-                .filter(c -> payer == null || payer.isBlank() || payer.equalsIgnoreCase("ALL") || 
-                        (c.getPayerName() != null && c.getPayerName().equalsIgnoreCase(payer.trim())))
+                .filter(c -> matchesCompany(c, user, payer))
                 .filter(c -> date == null || date.isBlank() || date.equalsIgnoreCase("ALL") || 
                         getClaimDateString(c).equals(date.trim()))
                 .sorted(Comparator.comparingInt(Claim::getDaysPending).reversed()
@@ -207,6 +225,7 @@ public class ArAgingService {
      * Get day-by-day statistics of submitted claims, billed amounts, and pending balances.
      */
     public List<Map<String, Object>> getDailyStats(String payer) {
+        UserPrincipal user = SecurityUtils.getCurrentUser();
         List<Claim> allClaims = claimRepository.findAll();
         for (Claim c : allClaims) {
             calculateArAging(c);
@@ -214,8 +233,7 @@ public class ArAgingService {
 
         List<Claim> active = allClaims.stream()
                 .filter(c -> !"PAID/CLOSED".equalsIgnoreCase(c.getAgingBucket()) && c.getPendingAmount() > 0.001)
-                .filter(c -> payer == null || payer.isBlank() || payer.equalsIgnoreCase("ALL") || 
-                        (c.getPayerName() != null && c.getPayerName().equalsIgnoreCase(payer.trim())))
+                .filter(c -> matchesCompany(c, user, payer))
                 .toList();
 
         Map<String, List<Claim>> byDate = active.stream()
@@ -255,14 +273,11 @@ public class ArAgingService {
         return result;
     }
 
-    public List<Claim> getArAgingClaims(String bucket) {
-        return getArAgingClaims(bucket, null);
-    }
-
     /**
      * Get distinct list of insurance payers with outstanding balances in AR aging.
      */
     public List<Map<String, Object>> getActivePayers() {
+        UserPrincipal user = SecurityUtils.getCurrentUser();
         List<Claim> allClaims = claimRepository.findAll();
         for (Claim c : allClaims) {
             calculateArAging(c);
@@ -270,6 +285,7 @@ public class ArAgingService {
 
         Map<String, List<Claim>> byPayer = allClaims.stream()
                 .filter(c -> !"PAID/CLOSED".equalsIgnoreCase(c.getAgingBucket()) && c.getPendingAmount() > 0.001)
+                .filter(c -> matchesCompany(c, user, null))
                 .filter(c -> c.getPayerName() != null && !c.getPayerName().isBlank())
                 .collect(Collectors.groupingBy(Claim::getPayerName));
 

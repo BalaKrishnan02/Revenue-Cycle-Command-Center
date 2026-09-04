@@ -7,7 +7,9 @@ import {
   calculateDemoMetrics,
   calculateDemoArAgingSummary,
   getDemoArAgingClaims,
-  getDemoDailyStats
+  getDemoDailyStats,
+  demoCompanies,
+  demoUsers
 } from './demoFallback';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
@@ -17,8 +19,37 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 4000,
+  timeout: 5000,
 });
+
+// Centralized Request Interceptor: Attach JWT Authorization Header
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('rcm_auth_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response Interceptor: Handle 401 Unauthorized
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Clear token if expired or invalid
+      const currentPath = window.location.pathname;
+      if (currentPath !== '/login' && currentPath !== '/register') {
+        localStorage.removeItem('rcm_auth_token');
+        localStorage.removeItem('rcm_user');
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Safe request wrapper that falls back to demo data on network failure (e.g. on mobile when backend is offline)
 const safeRequest = async (networkFn, fallbackFn) => {
@@ -56,9 +87,10 @@ export const getPayerAnalytics = () =>
     () => api.get('/analytics/payers'),
     () => [
       { payerName: 'Nova Health Insurance', totalClaims: 12, acceptedClaims: 9, deniedClaims: 3, totalBilled: 240000, totalCollected: 180000, denialRate: 25.0, averageSettlementDays: 14.5 },
-      { payerName: 'CareShield', totalClaims: 10, acceptedClaims: 8, deniedClaims: 2, totalBilled: 190000, totalCollected: 160000, denialRate: 20.0, averageSettlementDays: 12.0 },
-      { payerName: 'MediSecure', totalClaims: 8, acceptedClaims: 6, deniedClaims: 2, totalBilled: 150000, totalCollected: 110000, denialRate: 25.0, averageSettlementDays: 16.0 },
-      { payerName: 'HealthPrime', totalClaims: 6, acceptedClaims: 5, deniedClaims: 1, totalBilled: 120000, totalCollected: 95000, denialRate: 16.6, averageSettlementDays: 11.5 }
+      { payerName: 'CareShield Assurance', totalClaims: 10, acceptedClaims: 8, deniedClaims: 2, totalBilled: 190000, totalCollected: 160000, denialRate: 20.0, averageSettlementDays: 12.0 },
+      { payerName: 'MediSecure Benefits', totalClaims: 8, acceptedClaims: 6, deniedClaims: 2, totalBilled: 150000, totalCollected: 110000, denialRate: 25.0, averageSettlementDays: 16.0 },
+      { payerName: 'HealthPrime Plan', totalClaims: 8, acceptedClaims: 6, deniedClaims: 2, totalBilled: 145000, totalCollected: 115000, denialRate: 25.0, averageSettlementDays: 13.0 },
+      { payerName: 'Unity Payer Network', totalClaims: 7, acceptedClaims: 5, deniedClaims: 1, totalBilled: 112000, totalCollected: 88000, denialRate: 14.3, averageSettlementDays: 11.5 }
     ]
   );
 
@@ -379,16 +411,28 @@ export const recordPartialPayment = async (id, paymentData = {}) => {
 export const recordFollowUp = (id, notes = '') => api.post(`/claims/${id}/follow-up`, { notes });
 
 // Alerts
-export const getAlerts = () =>
+export const getAlerts = (companyId = '') =>
   safeRequest(
-    () => api.get('/alerts'),
-    () => getStoredAlerts()
+    () => api.get(`/alerts${companyId && companyId !== 'ALL' ? `?companyId=${encodeURIComponent(companyId)}` : ''}`),
+    () => {
+      const all = getStoredAlerts();
+      if (companyId && companyId !== 'ALL') {
+        return all.filter((a) => a.insuranceCompanyId === companyId);
+      }
+      return all;
+    }
   );
 
-export const getActiveAlerts = () =>
+export const getActiveAlerts = (companyId = '') =>
   safeRequest(
-    () => api.get('/alerts/active'),
-    () => getStoredAlerts().filter((a) => !a.resolved)
+    () => api.get(`/alerts/active${companyId && companyId !== 'ALL' ? `?companyId=${encodeURIComponent(companyId)}` : ''}`),
+    () => {
+      const all = getStoredAlerts().filter((a) => !a.resolved);
+      if (companyId && companyId !== 'ALL') {
+        return all.filter((a) => a.insuranceCompanyId === companyId);
+      }
+      return all;
+    }
   );
 
 export const resolveAlert = async (id) => {
@@ -426,11 +470,211 @@ export const resolveAllAlerts = async () => {
 export const getPayments = () =>
   safeRequest(
     () => api.get('/payments'),
-    () => [
-      { paymentId: 'PAY-5001', claimId: 'CLM5001', payerName: 'CareShield', claimAmount: 100000, paidAmount: 100000, paymentStatus: 'PAID', transactionReference: 'TXN-5001-SETTLE', paymentDate: new Date().toISOString() },
-      { paymentId: 'PAY-3001', claimId: 'CLM3001', payerName: 'Nova Health Insurance', claimAmount: 120000, paidAmount: 20000, paymentStatus: 'PAID', transactionReference: 'TXN-3001-PARTIAL', paymentDate: new Date(Date.now() - 86400000).toISOString() },
-      { paymentId: 'PAY-3003', claimId: 'CLM3003', payerName: 'MediSecure', claimAmount: 90000, paidAmount: 20000, paymentStatus: 'PAID', transactionReference: 'TXN-3003-PARTIAL', paymentDate: new Date(Date.now() - 2 * 86400000).toISOString() }
-    ]
+    () => {
+      const allPayments = [
+        { paymentId: 'PAY-5001', claimId: 'CLM5001', insuranceCompanyId: 'INS002', insuranceCompanyName: 'CareShield Assurance', payerName: 'CareShield', claimAmount: 100000, paidAmount: 100000, paymentStatus: 'PAID', transactionReference: 'TXN-5001-SETTLE', paymentDate: new Date().toISOString() },
+        { paymentId: 'PAY-3001', claimId: 'CLM3001', insuranceCompanyId: 'INS001', insuranceCompanyName: 'Nova Health Insurance', payerName: 'Nova Health Insurance', claimAmount: 120000, paidAmount: 20000, paymentStatus: 'PAID', transactionReference: 'TXN-3001-PARTIAL', paymentDate: new Date(Date.now() - 86400000).toISOString() },
+        { paymentId: 'PAY-3003', claimId: 'CLM3003', insuranceCompanyId: 'INS003', insuranceCompanyName: 'MediSecure Benefits', payerName: 'MediSecure', claimAmount: 90000, paidAmount: 20000, paymentStatus: 'PAID', transactionReference: 'TXN-3003-PARTIAL', paymentDate: new Date(Date.now() - 2 * 86400000).toISOString() }
+      ];
+
+      // If user is insurance company, filter payments in demo mode
+      try {
+        const raw = localStorage.getItem('rcm_user');
+        if (raw) {
+          const user = JSON.parse(raw);
+          if (user.role === 'INSURANCE_COMPANY' && user.companyId) {
+            return allPayments.filter((p) => p.insuranceCompanyId === user.companyId);
+          }
+        }
+      } catch (e) {}
+
+      return allPayments;
+    }
+  );
+
+// ==========================================
+// Authentication APIs
+// ==========================================
+export const loginUser = (credentials) =>
+  safeRequest(
+    () => api.post('/auth/login', credentials),
+    () => {
+      const email = credentials.email.trim().toLowerCase();
+      const matched = demoUsers.find((u) => u.email.toLowerCase() === email);
+      if (matched) {
+        return {
+          token: 'demo-jwt-token-' + matched.role.toLowerCase() + '-' + Date.now(),
+          userId: matched.id,
+          name: matched.name,
+          email: matched.email,
+          role: matched.role,
+          companyId: matched.companyId,
+          companyName: matched.companyName,
+          accountStatus: matched.accountStatus || 'ACTIVE'
+        };
+      }
+      // Default to demo admin if arbitrary login attempted offline
+      return {
+        token: 'demo-jwt-token-admin-' + Date.now(),
+        userId: 'u-admin-1',
+        name: 'RCM Administrator',
+        email: email,
+        role: 'RCM_ADMIN',
+        accountStatus: 'ACTIVE'
+      };
+    }
+  );
+
+export const registerUser = (data) =>
+  safeRequest(
+    () => api.post('/auth/register', data),
+    () => {
+      const isAdmin = data.registrationType === 'RCM_ADMIN';
+      const companyId = data.companyId || 'INS001';
+      const company = demoCompanies.find((c) => c.companyId === companyId);
+
+      return {
+        token: 'demo-jwt-token-registered-' + Date.now(),
+        userId: 'u-reg-' + Date.now(),
+        name: isAdmin ? data.fullName : (data.contactPerson || data.companyName + ' User'),
+        email: data.email,
+        role: isAdmin ? 'RCM_ADMIN' : 'INSURANCE_COMPANY',
+        companyId: !isAdmin ? companyId : undefined,
+        companyName: !isAdmin ? (company?.companyName || data.companyName || 'Nova Health Insurance') : undefined,
+        accountStatus: 'ACTIVE',
+        message: 'Demo registration successful.'
+      };
+    }
+  );
+
+export const getCurrentUser = () =>
+  safeRequest(
+    () => api.get('/auth/me'),
+    () => {
+      const raw = localStorage.getItem('rcm_user');
+      return raw ? JSON.parse(raw) : null;
+    }
+  );
+
+export const logoutUser = () =>
+  safeRequest(
+    () => api.post('/auth/logout'),
+    () => ({ message: 'Logged out successfully' })
+  );
+
+// ==========================================
+// Insurance Company Management (Admin APIs)
+// ==========================================
+export const getInsuranceCompanies = () =>
+  safeRequest(
+    () => api.get('/insurance-companies'),
+    () => demoCompanies.map((c) => ({
+      ...c,
+      claimsCount: getStoredClaims().filter((cl) => cl.insuranceCompanyId === c.companyId).length,
+      pendingAmount: getStoredClaims()
+        .filter((cl) => cl.insuranceCompanyId === c.companyId && cl.status !== 'PAID')
+        .reduce((sum, cl) => sum + (cl.pendingAmount || 0), 0),
+      activeUsers: 1
+    }))
+  );
+
+export const getPublicInsuranceCompanies = () =>
+  safeRequest(
+    () => api.get('/insurance-companies/public'),
+    () => demoCompanies
+  );
+
+export const createInsuranceCompany = (data) =>
+  safeRequest(
+    () => api.post('/insurance-companies', data),
+    () => {
+      const newCompany = {
+        id: 'INS' + String(demoCompanies.length + 1).padStart(3, '0'),
+        companyId: 'INS' + String(demoCompanies.length + 1).padStart(3, '0'),
+        companyCode: data.companyCode.toUpperCase(),
+        companyName: data.companyName,
+        contactPerson: data.contactPerson,
+        email: data.email,
+        status: data.status || 'ACTIVE'
+      };
+      demoCompanies.push(newCompany);
+      return newCompany;
+    }
+  );
+
+export const updateCompanyStatus = (id, status) =>
+  safeRequest(
+    () => api.put(`/insurance-companies/${id}/status`, { status }),
+    () => {
+      const c = demoCompanies.find((comp) => comp.id === id || comp.companyId === id);
+      if (c) c.status = status;
+      return c;
+    }
+  );
+
+export const updateInsuranceCompanyStatus = updateCompanyStatus;
+
+// ==========================================
+// User Management (Admin APIs)
+// ==========================================
+export const getAdminUsers = () =>
+  safeRequest(
+    () => api.get('/admin/users'),
+    () => demoUsers
+  );
+
+export const approveUser = (id) =>
+  safeRequest(
+    () => api.put(`/admin/users/${id}/approve`),
+    () => {
+      const u = demoUsers.find((user) => user.id === id);
+      if (u) u.accountStatus = 'ACTIVE';
+      return u;
+    }
+  );
+
+export const rejectUser = (id) =>
+  safeRequest(
+    () => api.put(`/admin/users/${id}/reject`),
+    () => {
+      const u = demoUsers.find((user) => user.id === id);
+      if (u) u.accountStatus = 'SUSPENDED';
+      return u;
+    }
+  );
+
+export const disableUser = (id) =>
+  safeRequest(
+    () => api.put(`/admin/users/${id}/disable`),
+    () => {
+      const u = demoUsers.find((user) => user.id === id);
+      if (u) u.accountStatus = 'SUSPENDED';
+      return u;
+    }
+  );
+
+// ==========================================
+// Insurer Claim Processing / Review API
+// ==========================================
+export const reviewClaim = (id, reviewData) =>
+  safeRequest(
+    () => api.post(`/claims/${id}/review`, reviewData),
+    () => {
+      const claims = getStoredClaims();
+      const claim = claims.find((c) => c.id === id || c.claimId === id);
+      if (claim) {
+        claim.status = reviewData.status;
+        if (reviewData.denialReason) claim.denialReason = reviewData.denialReason;
+        if (reviewData.allowedAmount) claim.allowedAmount = reviewData.allowedAmount;
+        if (reviewData.comments) claim.insurerComments = reviewData.comments;
+        if (reviewData.paymentStatus) claim.paymentStatus = reviewData.paymentStatus;
+        claim.reviewedAt = new Date().toISOString();
+        saveStoredClaims(claims);
+        return claim;
+      }
+      return null;
+    }
   );
 
 export default api;
+

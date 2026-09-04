@@ -17,13 +17,13 @@ public class AlertController {
     private final AlertService alertService;
 
     @GetMapping
-    public ResponseEntity<List<Alert>> getAllAlerts() {
-        return ResponseEntity.ok(alertService.getAllAlerts());
+    public ResponseEntity<List<Alert>> getAllAlerts(@RequestParam(required = false) String companyId) {
+        return ResponseEntity.ok(alertService.getAllAlerts(companyId));
     }
 
     @GetMapping("/active")
-    public ResponseEntity<List<Alert>> getActiveAlerts() {
-        return ResponseEntity.ok(alertService.getActiveAlerts());
+    public ResponseEntity<List<Alert>> getActiveAlerts(@RequestParam(required = false) String companyId) {
+        return ResponseEntity.ok(alertService.getActiveAlerts(companyId));
     }
 
     @PutMapping("/{id}/resolve")

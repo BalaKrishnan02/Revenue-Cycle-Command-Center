@@ -1,17 +1,24 @@
 package com.xirotech.rcm.service;
 
 import com.xirotech.rcm.dto.ClaimRequest;
+import com.xirotech.rcm.dto.ClaimReviewRequest;
 import com.xirotech.rcm.dto.PredictionRequest;
 import com.xirotech.rcm.dto.PredictionResponse;
 import com.xirotech.rcm.exception.ResourceNotFoundException;
 import com.xirotech.rcm.model.Claim;
 import com.xirotech.rcm.model.ClaimHistory;
+import com.xirotech.rcm.model.InsuranceCompany;
 import com.xirotech.rcm.repository.ClaimHistoryRepository;
 import com.xirotech.rcm.repository.ClaimRepository;
+import com.xirotech.rcm.repository.InsuranceCompanyRepository;
+import com.xirotech.rcm.security.SecurityUtils;
+import com.xirotech.rcm.security.UserPrincipal;
 import com.xirotech.rcm.websocket.LiveUpdateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.List;
@@ -25,6 +32,7 @@ public class ClaimService {
 
     private final ClaimRepository claimRepository;
     private final ClaimHistoryRepository claimHistoryRepository;
+    private final InsuranceCompanyRepository insuranceCompanyRepository;
     private final MlClientService mlClientService;
     private final PayerSimulationService payerSimulationService;
     private final AlertService alertService;
@@ -33,17 +41,37 @@ public class ClaimService {
     private final ArAgingService arAgingService;
 
     public List<Claim> getAllClaims() {
+        UserPrincipal user = SecurityUtils.getCurrentUser();
+        if (user != null && "INSURANCE_COMPANY".equalsIgnoreCase(user.getRole())) {
+            String companyId = user.getCompanyId();
+            log.info("Enforcing backend data isolation: fetching claims exclusively for companyId={}", companyId);
+            return claimRepository.findByInsuranceCompanyIdOrderByCreatedAtDesc(companyId);
+        }
         return claimRepository.findAllByOrderByCreatedAtDesc();
     }
 
     public Claim getClaimById(String idOrClaimId) {
-        return claimRepository.findByClaimId(idOrClaimId)
+        Claim claim = claimRepository.findByClaimId(idOrClaimId)
                 .or(() -> claimRepository.findById(idOrClaimId))
                 .orElseThrow(() -> new ResourceNotFoundException("Claim not found with id or claimId: " + idOrClaimId));
+
+        UserPrincipal user = SecurityUtils.getCurrentUser();
+        if (user != null && "INSURANCE_COMPANY".equalsIgnoreCase(user.getRole())) {
+            String companyId = user.getCompanyId();
+            if (claim.getInsuranceCompanyId() != null && !claim.getInsuranceCompanyId().equalsIgnoreCase(companyId)) {
+                log.warn("Security Alert: User {} belonging to {} attempted unauthorized access to claim {} belonging to company {}",
+                        user.getEmail(), companyId, claim.getClaimId(), claim.getInsuranceCompanyId());
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "Access Denied: You do not have permission to view claims belonging to another insurance company.");
+            }
+        }
+        return claim;
     }
 
     public List<ClaimHistory> getClaimHistory(String claimId) {
-        return claimHistoryRepository.findByClaimIdOrderByTimestampAsc(claimId);
+        // Enforce same access check
+        Claim claim = getClaimById(claimId);
+        return claimHistoryRepository.findByClaimIdOrderByTimestampAsc(claim.getClaimId());
     }
 
     public Claim createClaim(ClaimRequest request) {
@@ -57,13 +85,24 @@ public class ClaimService {
 
         double billAmount = request.getClaimAmount() != null ? request.getClaimAmount() : 0.0;
 
+        // Resolve insurance company
+        Map<String, String> companyInfo = resolveInsuranceCompany(
+                request.getInsuranceCompanyId(),
+                request.getInsuranceCompanyName(),
+                request.getPayerName()
+        );
+        String resolvedCompanyId = companyInfo.get("id");
+        String resolvedCompanyName = companyInfo.get("name");
+
         Optional<Claim> existing = claimRepository.findByClaimId(generatedClaimId);
         Claim claim;
         if (existing.isPresent()) {
             claim = existing.get();
             claim.setPatientName(request.getPatientName());
             claim.setPatientReference(patientRef);
-            claim.setPayerName(request.getPayerName());
+            claim.setInsuranceCompanyId(resolvedCompanyId);
+            claim.setInsuranceCompanyName(resolvedCompanyName);
+            claim.setPayerName(resolvedCompanyName);
             claim.setPayerType(request.getPayerType() != null ? request.getPayerType() : "COMMERCIAL");
             claim.setClaimAmount(billAmount);
             claim.setTotalBillAmount(billAmount);
@@ -84,7 +123,9 @@ public class ClaimService {
                     .claimId(generatedClaimId)
                     .patientName(request.getPatientName())
                     .patientReference(patientRef)
-                    .payerName(request.getPayerName())
+                    .insuranceCompanyId(resolvedCompanyId)
+                    .insuranceCompanyName(resolvedCompanyName)
+                    .payerName(resolvedCompanyName)
                     .payerType(request.getPayerType() != null ? request.getPayerType() : "COMMERCIAL")
                     .claimAmount(billAmount)
                     .totalBillAmount(billAmount)
@@ -108,10 +149,32 @@ public class ClaimService {
         arAgingService.calculateArAging(claim);
         Claim saved = claimRepository.save(claim);
 
-        logHistory(saved.getClaimId(), null, "CREATED", "Claim created in billing system. Bill Amount: ₹" + String.format("%,.0f", billAmount));
+        logHistory(saved.getClaimId(), null, "CREATED", "Claim created in billing system for " + resolvedCompanyName + ". Bill Amount: ₹" + String.format("%,.0f", billAmount));
         liveUpdateService.broadcastUpdate("CLAIM_CREATED", saved);
 
         return saved;
+    }
+
+    private Map<String, String> resolveInsuranceCompany(String companyId, String companyName, String payerName) {
+        if (companyId != null && !companyId.isBlank()) {
+            Optional<InsuranceCompany> comp = insuranceCompanyRepository.findById(companyId)
+                    .or(() -> insuranceCompanyRepository.findByCompanyCode(companyId));
+            if (comp.isPresent()) {
+                return Map.of("id", comp.get().getId(), "name", comp.get().getCompanyName());
+            }
+        }
+
+        String candidate = (companyName != null && !companyName.isBlank()) ? companyName : payerName;
+        if (candidate != null) {
+            String lower = candidate.toLowerCase();
+            if (lower.contains("nova")) return Map.of("id", "INS001", "name", "Nova Health Insurance");
+            if (lower.contains("care") || lower.contains("shield")) return Map.of("id", "INS002", "name", "CareShield Assurance");
+            if (lower.contains("medi") || lower.contains("secure")) return Map.of("id", "INS003", "name", "MediSecure Benefits");
+            if (lower.contains("prime") || lower.contains("healthprime")) return Map.of("id", "INS004", "name", "HealthPrime Plan");
+            if (lower.contains("unity")) return Map.of("id", "INS005", "name", "Unity Payer Network");
+        }
+
+        return Map.of("id", "INS001", "name", candidate != null ? candidate : "Nova Health Insurance");
     }
 
     public Claim predictClaimRisk(String idOrClaimId) {
@@ -355,6 +418,71 @@ public class ClaimService {
 
         logHistory(claim.getClaimId(), claim.getStatus(), claim.getStatus(),
                 "Billing follow-up performed by staff: " + (notes != null ? notes : "Followed up with payer regarding outstanding balance."));
+
+        liveUpdateService.broadcastUpdate("CLAIM_UPDATED", updated);
+        return updated;
+    }
+
+    public Claim reviewClaimByInsurer(String idOrClaimId, ClaimReviewRequest request) {
+        Claim claim = getClaimById(idOrClaimId);
+        UserPrincipal user = SecurityUtils.getCurrentUser();
+
+        // Enforce insurer ownership
+        if (user != null && "INSURANCE_COMPANY".equalsIgnoreCase(user.getRole())) {
+            String companyId = user.getCompanyId();
+            if (claim.getInsuranceCompanyId() != null && !claim.getInsuranceCompanyId().equalsIgnoreCase(companyId)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "Access Denied: You cannot review claims belonging to another company.");
+            }
+        }
+
+        String oldStatus = claim.getStatus();
+        String newStatus = request.getStatus() != null ? request.getStatus().trim().toUpperCase() : oldStatus;
+
+        claim.setStatus(newStatus);
+        claim.setReviewedAt(Instant.now());
+        if (user != null) {
+            claim.setReviewedBy(user.getName());
+        }
+
+        if (request.getComments() != null && !request.getComments().isBlank()) {
+            claim.setInsurerComments(request.getComments().trim());
+        }
+
+        if ("DENIED".equalsIgnoreCase(newStatus)) {
+            String reason = request.getDenialReason() != null && !request.getDenialReason().isBlank()
+                    ? request.getDenialReason().trim()
+                    : "Denied by insurance payer review";
+            claim.setDenialReason(reason);
+        } else if ("ACCEPTED".equalsIgnoreCase(newStatus)) {
+            claim.setDenialReason(null);
+            if (request.getAllowedAmount() != null && request.getAllowedAmount() > 0) {
+                claim.setAllowedAmount(request.getAllowedAmount());
+            } else if (claim.getAllowedAmount() <= 0) {
+                claim.setAllowedAmount(claim.getTotalBillAmount());
+            }
+            if (request.getPaymentStatus() != null && !request.getPaymentStatus().isBlank()) {
+                claim.setPaymentStatus(request.getPaymentStatus().trim().toUpperCase());
+            }
+        }
+
+        billingPriorityService.calculateBillingPriority(claim);
+        arAgingService.calculateArAging(claim);
+        claim.setUpdatedAt(Instant.now());
+        Claim updated = claimRepository.save(claim);
+
+        logHistory(claim.getClaimId(), oldStatus, newStatus,
+                "Claim reviewed by " + (claim.getInsuranceCompanyName() != null ? claim.getInsuranceCompanyName() : "Payer") +
+                ": Status transitioned to " + newStatus +
+                (claim.getDenialReason() != null ? ". Reason: " + claim.getDenialReason() : ""));
+
+        alertService.createAlert(
+                claim.getClaimId(),
+                "ACCEPTED".equalsIgnoreCase(newStatus) ? "SUCCESS" : ("DENIED".equalsIgnoreCase(newStatus) ? "DENIAL" : "INFO"),
+                "ACCEPTED".equalsIgnoreCase(newStatus) ? "SUCCESS" : ("DENIED".equalsIgnoreCase(newStatus) ? "CRITICAL" : "INFO"),
+                "Claim " + claim.getClaimId() + " " + newStatus,
+                claim.getClaimId() + " was set to " + newStatus + " by " + (claim.getInsuranceCompanyName() != null ? claim.getInsuranceCompanyName() : "Insurance Payer") + "."
+        );
 
         liveUpdateService.broadcastUpdate("CLAIM_UPDATED", updated);
         return updated;

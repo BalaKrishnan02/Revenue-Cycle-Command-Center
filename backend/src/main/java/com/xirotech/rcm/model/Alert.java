@@ -22,6 +22,12 @@ public class Alert {
 
     private String alertId;
     private String claimId;
+
+    @org.springframework.data.mongodb.core.index.Indexed
+    private String insuranceCompanyId;
+
+    private String insuranceCompanyName;
+
     private String type; // HIGH_RISK, MISSING_AUTH, DENIAL, PAYMENT, SUCCESS, INFO
     private String severity; // CRITICAL, WARNING, INFO, SUCCESS
     private String title;

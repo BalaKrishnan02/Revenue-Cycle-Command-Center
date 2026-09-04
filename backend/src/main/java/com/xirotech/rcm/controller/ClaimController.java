@@ -1,6 +1,7 @@
 package com.xirotech.rcm.controller;
 
 import com.xirotech.rcm.dto.ClaimRequest;
+import com.xirotech.rcm.dto.ClaimReviewRequest;
 import com.xirotech.rcm.dto.PaymentRequest;
 import com.xirotech.rcm.model.Claim;
 import com.xirotech.rcm.model.ClaimHistory;
@@ -96,6 +97,11 @@ public class ClaimController {
     @PostMapping("/api/claims/{id}/pending")
     public ResponseEntity<Claim> setPending(@PathVariable String id) {
         return ResponseEntity.ok(claimService.manualSetPending(id));
+    }
+
+    @PostMapping("/api/claims/{id}/review")
+    public ResponseEntity<Claim> reviewClaim(@PathVariable String id, @RequestBody ClaimReviewRequest request) {
+        return ResponseEntity.ok(claimService.reviewClaimByInsurer(id, request));
     }
 
     @PostMapping({"/api/claims/{id}/pay", "/api/claims/{id}/payment"})

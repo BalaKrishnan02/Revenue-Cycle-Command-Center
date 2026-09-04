@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import {
   Bell,
   AlertTriangle,
@@ -13,25 +14,42 @@ import {
   CheckCheck,
   History,
   Clock,
-  ArrowRight,
-  Flame
+  Building2,
+  Shield,
+  ShieldCheck,
+  Filter,
+  Lock
 } from 'lucide-react';
 import { getAlerts, resolveAlert, resolveAllAlerts } from '../services/api';
 
+const DEMO_PAYERS = [
+  { id: 'ALL', code: 'ALL', name: 'All Insurance Companies' },
+  { id: 'INS001', code: 'NOVA001', name: 'Nova Health Insurance' },
+  { id: 'INS002', code: 'CARE002', name: 'CareShield Assurance' },
+  { id: 'INS003', code: 'MEDI003', name: 'MediSecure Benefits' },
+  { id: 'INS004', code: 'HP004', name: 'HealthPrime Plan' },
+  { id: 'INS005', code: 'UNITY005', name: 'Unity Payer Network' },
+];
+
 export default function AlertCenterPage() {
+  const { user, isRcmAdmin, isInsuranceCompany } = useAuth();
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('ACTIVE'); // 'ACTIVE', 'ALL', 'RESOLVED'
   const [searchTerm, setSearchTerm] = useState('');
   const [severityFilter, setSeverityFilter] = useState('ALL');
+  const [selectedPayer, setSelectedPayer] = useState(isInsuranceCompany() ? (user?.companyId || 'INS001') : 'ALL');
   const [notification, setNotification] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+
+  // If insurance company logs in, enforce their company ID
+  const effectivePayer = isInsuranceCompany() ? (user?.companyId || 'INS001') : selectedPayer;
 
   const loadAlerts = async () => {
     try {
       setLoading(true);
-      const res = await getAlerts();
-      setAlerts(res.data);
+      const res = await getAlerts(effectivePayer);
+      setAlerts(res.data || []);
     } catch (err) {
       console.error('Error fetching alerts:', err);
     } finally {
@@ -43,7 +61,7 @@ export default function AlertCenterPage() {
     loadAlerts();
     const interval = setInterval(loadAlerts, 4000);
     return () => clearInterval(interval);
-  }, []);
+  }, [effectivePayer]);
 
   const showNotification = (msg, type = 'success') => {
     setNotification({ text: msg, type });
@@ -55,11 +73,11 @@ export default function AlertCenterPage() {
     try {
       setActionLoading(true);
       await resolveAlert(id);
-      showNotification(`"${title || 'Alert'}" marked as read and moved to All History!`);
+      showNotification(`"${title || 'Alert'}" marked as read and moved to history!`);
       await loadAlerts();
     } catch (err) {
       console.error('Error resolving alert:', err);
-      showNotification('Could not mark alert as read', 'danger');
+      showNotification(err.response?.data?.message || 'Could not mark alert as read', 'danger');
     } finally {
       setActionLoading(false);
     }
@@ -73,7 +91,7 @@ export default function AlertCenterPage() {
     try {
       setActionLoading(true);
       await resolveAllAlerts();
-      showNotification(`All ${activeCount} active alerts marked as read and moved to All History!`);
+      showNotification(`All ${activeCount} active alerts marked as read and moved to history!`);
       await loadAlerts();
     } catch (err) {
       console.error('Error marking all as read:', err);
@@ -83,7 +101,7 @@ export default function AlertCenterPage() {
     }
   };
 
-  // Filter alerts
+  // Filter alerts by search, severity, and tab
   const filteredAlerts = alerts.filter((a) => {
     // Tab filter
     if (filter === 'ACTIVE' && a.resolved) return false;
@@ -99,7 +117,8 @@ export default function AlertCenterPage() {
       const matchMsg = (a.message || '').toLowerCase().includes(term);
       const matchClaim = (a.claimId || '').toLowerCase().includes(term);
       const matchId = (a.alertId || '').toLowerCase().includes(term);
-      return matchTitle || matchMsg || matchClaim || matchId;
+      const matchCompany = (a.insuranceCompanyName || '').toLowerCase().includes(term);
+      return matchTitle || matchMsg || matchClaim || matchId || matchCompany;
     }
 
     return true;
@@ -154,16 +173,51 @@ export default function AlertCenterPage() {
   };
 
   return (
-    <div className="page-wrapper">
+    <div className="page-wrapper" style={{ maxWidth: '1400px', margin: '0 auto', padding: '1.75rem 2rem' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--navy-dark)', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
-            <Bell size={24} color="#ef4444" />
-            Revenue Cycle Alert Center
-          </h2>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
-            Real-time proactive notification stream for denials, missing auth, high billing priority, and payer remittance.
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <Bell size={26} color={isInsuranceCompany() ? '#059669' : '#ef4444'} />
+            <h1 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--navy-dark)', margin: 0 }}>
+              {isInsuranceCompany() ? `${user?.companyName || 'Insurance Company'} — Alert Center` : 'Revenue Cycle Alert Command Center'}
+            </h1>
+            {isInsuranceCompany() ? (
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                padding: '0.2rem 0.65rem',
+                borderRadius: '9999px',
+                backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                color: '#065f46',
+                fontSize: '0.75rem',
+                fontWeight: '700',
+                border: '1px solid rgba(16, 185, 129, 0.3)'
+              }}>
+                <ShieldCheck size={13} /> Payer Verified
+              </span>
+            ) : (
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                padding: '0.2rem 0.65rem',
+                borderRadius: '9999px',
+                backgroundColor: 'rgba(99, 102, 241, 0.15)',
+                color: '#4f46e5',
+                fontSize: '0.75rem',
+                fontWeight: '700',
+                border: '1px solid rgba(99, 102, 241, 0.3)'
+              }}>
+                <Shield size={13} /> Admin All-Payers View
+              </span>
+            )}
+          </div>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '0.35rem 0 0 0' }}>
+            {isInsuranceCompany()
+              ? `Real-time adjudication notices, denial warnings, and payment remittance events exclusively for ${user?.companyName || 'your organization'}.`
+              : 'Enterprise-wide proactive notification stream for denials, missing pre-auth, high billing priority, and cross-payer remittance.'}
           </p>
         </div>
 
@@ -192,6 +246,70 @@ export default function AlertCenterPage() {
           </button>
         </div>
       </div>
+
+      {/* Insurance Company Specific Tenant Isolation Notice */}
+      {isInsuranceCompany() ? (
+        <div style={{
+          marginBottom: '1.5rem',
+          padding: '0.9rem 1.25rem',
+          borderRadius: '10px',
+          background: 'rgba(16, 185, 129, 0.08)',
+          border: '1px solid rgba(16, 185, 129, 0.3)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem'
+        }}>
+          <Lock size={18} color="#10b981" style={{ flexShrink: 0 }} />
+          <div style={{ fontSize: '0.825rem', color: '#334155' }}>
+            <strong style={{ color: '#065f46' }}>Tenant Isolation Active: </strong>
+            You are viewing operational alerts exclusively registered to <strong style={{ color: '#047857' }}>{user?.companyName} ({user?.companyId || 'INS001'})</strong>. Alerts from other insurance companies are strictly isolated and not accessible.
+          </div>
+        </div>
+      ) : (
+        /* RCM Admin: Quick Company Filter Selector Bar */
+        <div style={{
+          background: '#ffffff',
+          borderRadius: '12px',
+          padding: '1rem 1.25rem',
+          border: '1px solid #e2e8f0',
+          marginBottom: '1.5rem',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Building2 size={18} color="#2563eb" />
+              <span style={{ fontSize: '0.85rem', fontWeight: '700', color: '#0f172a' }}>
+                Filter Alerts by Insurance Company:
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              {DEMO_PAYERS.map((payer) => {
+                const isSelected = selectedPayer === payer.id;
+                return (
+                  <button
+                    key={payer.id}
+                    onClick={() => setSelectedPayer(payer.id)}
+                    className="btn btn-sm"
+                    style={{
+                      padding: '0.35rem 0.75rem',
+                      fontSize: '0.75rem',
+                      fontWeight: isSelected ? '700' : '600',
+                      backgroundColor: isSelected ? '#2563eb' : '#f1f5f9',
+                      color: isSelected ? '#ffffff' : '#475569',
+                      border: isSelected ? '1px solid #1d4ed8' : '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {payer.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating Action Toast Notification */}
       {notification && (
@@ -226,7 +344,7 @@ export default function AlertCenterPage() {
       )}
 
       {/* Tab Navigation & Search Filter Controls */}
-      <div className="card" style={{ marginBottom: '1.5rem', padding: '1rem' }}>
+      <div className="card" style={{ marginBottom: '1.5rem', padding: '1rem', background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           {/* Main Navigation Tabs */}
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -277,7 +395,7 @@ export default function AlertCenterPage() {
               <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               <input
                 type="text"
-                placeholder="Search alerts by claim, keyword..."
+                placeholder={isRcmAdmin() ? "Search alerts, claims, company..." : "Search alerts, claims..."}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="form-control"
@@ -304,7 +422,7 @@ export default function AlertCenterPage() {
       {/* ========================================================================= */}
       {/* LINE-BY-LINE UPCOMING ALERTS & HISTORY FEED                               */}
       {/* ========================================================================= */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden', boxShadow: 'var(--shadow-md)' }}>
+      <div className="card" style={{ padding: 0, overflow: 'hidden', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 6px rgba(0,0,0,0.03)' }}>
         <div style={{
           padding: '0.85rem 1.25rem',
           backgroundColor: '#f8fafc',
@@ -315,9 +433,14 @@ export default function AlertCenterPage() {
         }}>
           <span style={{ fontSize: '0.8rem', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569' }}>
             {filter === 'ACTIVE' ? 'Active Alerts Feed (Upcoming Line-by-Line)' : (filter === 'ALL' ? 'All Alert History (Chronological Feed)' : 'Resolved Alerts')}
+            {isRcmAdmin() && selectedPayer !== 'ALL' && (
+              <span style={{ color: '#2563eb', marginLeft: '0.5rem', fontWeight: '700' }}>
+                &bull; Payer: {DEMO_PAYERS.find(p => p.id === selectedPayer)?.name}
+              </span>
+            )}
           </span>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            Showing <strong>{filteredAlerts.length}</strong> items
+            Showing <strong>{filteredAlerts.length}</strong> alerts
           </span>
         </div>
 
@@ -328,7 +451,7 @@ export default function AlertCenterPage() {
               {filter === 'ACTIVE' ? 'No active alerts in queue' : 'No alerts match your filter'}
             </h4>
             <p style={{ fontSize: '0.85rem', margin: '0.25rem 0 1rem 0' }}>
-              {filter === 'ACTIVE' ? 'All operational alerts have been marked as read and moved to history.' : 'Try changing your search keywords or severity filter.'}
+              {filter === 'ACTIVE' ? 'All operational alerts for this company have been addressed.' : 'Try changing your search keywords or severity filter.'}
             </p>
             {filter === 'ACTIVE' && (
               <button onClick={() => setFilter('ALL')} className="btn btn-secondary btn-sm">
@@ -382,11 +505,30 @@ export default function AlertCenterPage() {
 
                     {/* Alert Text Line */}
                     <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.15rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.2rem' }}>
                         <span style={{ fontWeight: '800', fontSize: '0.92rem', color: isResolved ? '#475569' : 'var(--navy-dark)' }}>
                           {alert.title}
                         </span>
+
+                        {/* Company Badge */}
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.3rem',
+                          padding: '0.12rem 0.5rem',
+                          borderRadius: '4px',
+                          fontSize: '0.7rem',
+                          fontWeight: '700',
+                          backgroundColor: 'rgba(37, 99, 235, 0.08)',
+                          color: '#2563eb',
+                          border: '1px solid rgba(37, 99, 235, 0.2)'
+                        }}>
+                          <Building2 size={11} />
+                          {alert.insuranceCompanyName || (isInsuranceCompany() ? (user?.companyName || 'Assigned Payer') : 'All Payers')}
+                        </span>
+
                         {getSeverityBadge(alert.severity)}
+
                         {isResolved ? (
                           <span style={{
                             fontSize: '0.68rem',

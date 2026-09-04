@@ -22,6 +22,8 @@ public class Payment {
 
     private String paymentId;
     private String claimId;
+    private String insuranceCompanyId;
+    private String insuranceCompanyName;
     private String payerName;
     private double claimAmount;
     private double paidAmount;

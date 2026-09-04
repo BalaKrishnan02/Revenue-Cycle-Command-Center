@@ -7,12 +7,16 @@ import com.xirotech.rcm.dto.RevenueAnalytics;
 import com.xirotech.rcm.model.Claim;
 import com.xirotech.rcm.repository.ClaimRepository;
 import com.xirotech.rcm.repository.PaymentRepository;
+import com.xirotech.rcm.security.SecurityUtils;
+import com.xirotech.rcm.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class DashboardService {
@@ -21,8 +25,18 @@ public class DashboardService {
     private final PaymentRepository paymentRepository;
     private final BillingPriorityService billingPriorityService;
 
+    private List<Claim> getScopedClaims() {
+        UserPrincipal user = SecurityUtils.getCurrentUser();
+        if (user != null && "INSURANCE_COMPANY".equalsIgnoreCase(user.getRole())) {
+            String companyId = user.getCompanyId();
+            log.info("Scoped dashboard metrics: filtering claims exclusively for companyId={}", companyId);
+            return claimRepository.findByInsuranceCompanyIdOrderByCreatedAtDesc(companyId);
+        }
+        return claimRepository.findAll();
+    }
+
     public DashboardMetrics getDashboardMetrics() {
-        List<Claim> allClaims = claimRepository.findAll();
+        List<Claim> allClaims = getScopedClaims();
 
         long totalClaims = allClaims.size();
         long acceptedClaims = allClaims.stream().filter(c -> "ACCEPTED".equalsIgnoreCase(c.getStatus()) || "PAID".equalsIgnoreCase(c.getStatus())).count();
@@ -60,11 +74,15 @@ public class DashboardService {
 
         // Calculate rates safely
         long submittedClaimsCount = allClaims.stream()
-                .filter(c -> !"CREATED".equalsIgnoreCase(c.getStatus()) && !"AI_CHECKED".equalsIgnoreCase(c.getStatus()) && !"HIGH_RISK".equalsIgnoreCase(c.getStatus()) && !"READY_TO_SUBMIT".equalsIgnoreCase(c.getStatus()) && !"CORRECTED".equalsIgnoreCase(c.getStatus()))
+                .filter(c -> !"CREATED".equalsIgnoreCase(c.getStatus()) && !"AI_CHECKED".equalsIgnoreCase(c.getStatus()) && !"READY_TO_SUBMIT".equalsIgnoreCase(c.getStatus()))
                 .count();
 
-        double acceptanceRate = submittedClaimsCount > 0 ? ((double) acceptedClaims / submittedClaimsCount) * 100.0 : 0.0;
-        double denialRate = submittedClaimsCount > 0 ? ((double) deniedClaims / submittedClaimsCount) * 100.0 : 0.0;
+        long rateDenominator = submittedClaimsCount > 0 ? submittedClaimsCount : Math.max(1, totalClaims);
+
+        double acceptanceRate = Math.round(((double) acceptedClaims / rateDenominator) * 1000.0) / 10.0;
+        double denialRate = deniedClaims > 0
+                ? Math.round(((double) deniedClaims / rateDenominator) * 1000.0) / 10.0
+                : (highRiskClaims > 0 ? Math.round(((double) highRiskClaims / Math.max(1, totalClaims)) * 1000.0) / 10.0 : 0.0);
 
         Map<String, Long> statusBreakdown = allClaims.stream()
                 .collect(Collectors.groupingBy(c -> c.getStatus() != null ? c.getStatus() : "UNKNOWN", Collectors.counting()));
@@ -106,7 +124,7 @@ public class DashboardService {
     }
 
     public List<DenialAnalytics> getDenialAnalytics() {
-        List<Claim> allClaims = claimRepository.findAll();
+        List<Claim> allClaims = getScopedClaims();
         List<Claim> deniedClaims = allClaims.stream()
                 .filter(c -> "DENIED".equalsIgnoreCase(c.getStatus()) || (c.getDenialReason() != null && !c.getDenialReason().isBlank()))
                 .toList();
@@ -159,9 +177,23 @@ public class DashboardService {
     }
 
     public List<PayerAnalytics> getPayerAnalytics() {
-        List<Claim> allClaims = claimRepository.findAll();
+        List<Claim> allClaims = getScopedClaims();
         Map<String, List<Claim>> byPayer = allClaims.stream()
-                .collect(Collectors.groupingBy(Claim::getPayerName));
+                .collect(Collectors.groupingBy(c -> {
+                    if (c.getInsuranceCompanyName() != null && !c.getInsuranceCompanyName().isBlank()) {
+                        return c.getInsuranceCompanyName();
+                    }
+                    if (c.getPayerName() != null && !c.getPayerName().isBlank()) {
+                        String p = c.getPayerName().toLowerCase();
+                        if (p.contains("nova")) return "Nova Health Insurance";
+                        if (p.contains("care") || p.contains("shield")) return "CareShield Assurance";
+                        if (p.contains("medi") || p.contains("secure")) return "MediSecure Benefits";
+                        if (p.contains("prime") || p.contains("healthprime")) return "HealthPrime Plan";
+                        if (p.contains("unity")) return "Unity Payer Network";
+                        return c.getPayerName();
+                    }
+                    return "Other Payer";
+                }));
 
         List<PayerAnalytics> result = new ArrayList<>();
 
@@ -174,7 +206,7 @@ public class DashboardService {
             long denied = claims.stream().filter(c -> "DENIED".equalsIgnoreCase(c.getStatus())).count();
             double billed = claims.stream().mapToDouble(c -> c.getTotalBillAmount() > 0 ? c.getTotalBillAmount() : c.getClaimAmount()).sum();
             double collected = claims.stream().mapToDouble(Claim::getPaidAmount).sum();
-            double denialRate = total > 0 ? ((double) denied / total) * 100.0 : 0.0;
+            double denialRate = total > 0 ? Math.round(((double) denied / total) * 1000.0) / 10.0 : 0.0;
 
             result.add(PayerAnalytics.builder()
                     .payerName(payer)
@@ -183,7 +215,7 @@ public class DashboardService {
                     .deniedClaims(denied)
                     .totalBilled(Math.round(billed * 100.0) / 100.0)
                     .totalCollected(Math.round(collected * 100.0) / 100.0)
-                    .denialRate(Math.round(denialRate * 10.0) / 10.0)
+                    .denialRate(denialRate)
                     .averageSettlementDays(14.5)
                     .build());
         }
@@ -193,7 +225,7 @@ public class DashboardService {
     }
 
     public List<RevenueAnalytics> getRevenueAnalytics() {
-        List<Claim> all = claimRepository.findAll();
+        List<Claim> all = getScopedClaims();
         double totalBilled = all.stream().mapToDouble(c -> c.getTotalBillAmount() > 0 ? c.getTotalBillAmount() : c.getClaimAmount()).sum();
         double totalCollected = all.stream().mapToDouble(Claim::getPaidAmount).sum();
 

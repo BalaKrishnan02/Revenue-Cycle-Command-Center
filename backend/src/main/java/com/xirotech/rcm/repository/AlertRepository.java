@@ -11,4 +11,6 @@ public interface AlertRepository extends MongoRepository<Alert, String> {
     List<Alert> findByResolvedFalseOrderByCreatedAtDesc();
     List<Alert> findAllByOrderByCreatedAtDesc();
     List<Alert> findByClaimId(String claimId);
+    List<Alert> findByInsuranceCompanyIdOrderByCreatedAtDesc(String insuranceCompanyId);
+    List<Alert> findByInsuranceCompanyIdAndResolvedFalseOrderByCreatedAtDesc(String insuranceCompanyId);
 }

@@ -23,6 +23,8 @@ public class ClaimRequest {
 
     @NotBlank(message = "Payer name is required")
     private String payerName;
+    private String insuranceCompanyId;
+    private String insuranceCompanyName;
 
     private String payerType; // PRIVATE, MEDICARE, MEDICAID, COMMERCIAL
 

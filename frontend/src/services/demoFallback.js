@@ -307,8 +307,10 @@ export const initialDemoClaims = [
     claimId: 'CLM1002',
     patientName: 'Priya Sharma',
     patientReference: 'PT1002',
-    payerName: 'CareShield',
+    payerName: 'CareShield Assurance',
     payerType: 'COMMERCIAL',
+    insuranceCompanyId: 'INS002',
+    insuranceCompanyName: 'CareShield Assurance',
     claimAmount: 48000,
     totalBillAmount: 48000,
     paidAmount: 0,
@@ -316,77 +318,295 @@ export const initialDemoClaims = [
     daysPending: 8,
     billingPriorityScore: 57,
     billingPriority: 'HIGH',
-    priorityReason: '₹48,000 pending for 8 days from CareShield',
+    priorityReason: '₹48,000 pending for 8 days from CareShield Assurance',
     paymentStatus: 'UNPAID',
-    status: 'HIGH_RISK',
+    status: 'DENIED',
     riskScore: 88,
     riskLevel: 'HIGH',
     predictedReason: 'Missing Prior Authorization',
     recommendation: 'Obtain required pre-authorization from CareShield.',
+    denialReason: 'Prior Authorization Absent: Pre-auth required for surgical procedure code 99214',
     eligibilityVerified: true,
     authorizationAvailable: false,
     codingComplete: true,
     documentationComplete: true,
     previousDenials: 3,
     createdAt: new Date(Date.now() - 8 * 86400000).toISOString()
+  },
+  {
+    id: 'c-1003',
+    claimId: 'CLM1003',
+    patientName: 'Rahul Verma',
+    patientReference: 'PT1003',
+    payerName: 'MediSecure Benefits',
+    payerType: 'PRIVATE',
+    insuranceCompanyId: 'INS003',
+    insuranceCompanyName: 'MediSecure Benefits',
+    claimAmount: 62000,
+    totalBillAmount: 62000,
+    paidAmount: 0,
+    pendingAmount: 62000,
+    daysPending: 22,
+    billingPriorityScore: 76,
+    billingPriority: 'HIGH',
+    priorityReason: 'Claim denied: Incomplete / Invalid Coding',
+    paymentStatus: 'UNPAID',
+    status: 'DENIED',
+    riskScore: 76,
+    riskLevel: 'HIGH',
+    predictedReason: 'Incomplete / Invalid Coding (ICD/CPT)',
+    recommendation: 'Review diagnosis coding.',
+    denialReason: 'Coding Error: CPT 99214 requires modifier -25',
+    eligibilityVerified: true,
+    authorizationAvailable: true,
+    codingComplete: false,
+    documentationComplete: false,
+    previousDenials: 1,
+    createdAt: new Date(Date.now() - 22 * 86400000).toISOString()
+  },
+  {
+    id: 'c-4004',
+    claimId: 'CLM4004',
+    patientName: 'Manish Tiwari',
+    patientReference: 'PT4004',
+    payerName: 'HealthPrime Plan',
+    payerType: 'COMMERCIAL',
+    insuranceCompanyId: 'INS004',
+    insuranceCompanyName: 'HealthPrime Plan',
+    claimAmount: 68000,
+    totalBillAmount: 68000,
+    paidAmount: 0,
+    pendingAmount: 68000,
+    daysPending: 16,
+    billingPriorityScore: 82,
+    billingPriority: 'HIGH',
+    priorityReason: 'Timely Filing Window Exceeded on HealthPrime claim',
+    paymentStatus: 'UNPAID',
+    status: 'DENIED',
+    riskScore: 82,
+    riskLevel: 'HIGH',
+    predictedReason: 'Timely Filing Window Exceeded',
+    recommendation: 'File formal appeal within 30 days.',
+    denialReason: 'Filing Limit Exceeded: Claim submitted past 90-day payer adjudication window.',
+    eligibilityVerified: true,
+    authorizationAvailable: false,
+    codingComplete: true,
+    documentationComplete: true,
+    previousDenials: 2,
+    createdAt: new Date(Date.now() - 16 * 86400000).toISOString()
+  },
+  {
+    id: 'c-4005',
+    claimId: 'CLM4005',
+    patientName: 'Tanvi Agarwal',
+    patientReference: 'PT4005',
+    payerName: 'Unity Payer Network',
+    payerType: 'PRIVATE',
+    insuranceCompanyId: 'INS005',
+    insuranceCompanyName: 'Unity Payer Network',
+    claimAmount: 52000,
+    totalBillAmount: 52000,
+    paidAmount: 0,
+    pendingAmount: 52000,
+    daysPending: 19,
+    billingPriorityScore: 79,
+    billingPriority: 'HIGH',
+    priorityReason: 'Incomplete documentation: operative notes unverified',
+    paymentStatus: 'UNPAID',
+    status: 'DENIED',
+    riskScore: 79,
+    riskLevel: 'HIGH',
+    predictedReason: 'Incomplete Clinical Documentation',
+    recommendation: 'Submit operative notes and pathology report.',
+    denialReason: 'Documentation Deficient: Operative notes missing required physician signature.',
+    eligibilityVerified: true,
+    authorizationAvailable: true,
+    codingComplete: false,
+    documentationComplete: false,
+    previousDenials: 1,
+    createdAt: new Date(Date.now() - 19 * 86400000).toISOString()
   }
 ];
 
 export const initialDemoAlerts = [
   {
     id: 'alt-1',
-    alertId: 'ALT-3001',
-    claimId: 'CLM3001',
-    type: 'HIGH_PRIORITY',
+    alertId: 'ALT-NOVA-101',
+    claimId: 'CLM1001',
+    insuranceCompanyId: 'INS001',
+    insuranceCompanyName: 'Nova Health Insurance',
+    type: 'DENIAL',
     severity: 'CRITICAL',
-    title: 'High Outstanding Bill: CLM3001',
-    message: '₹100,000 outstanding for 20 days on claim CLM3001 with Nova Health Insurance. Immediate follow-up recommended.',
+    title: 'Eligibility Lapsed: CLM1001',
+    message: 'Claim CLM1001 has expired policy coverage. Immediate member verification needed.',
     resolved: false,
     createdAt: new Date(Date.now() - 2 * 3600000).toISOString()
   },
   {
     id: 'alt-2',
-    alertId: 'ALT-3003',
-    claimId: 'CLM3003',
-    type: 'OVERDUE',
-    severity: 'CRITICAL',
-    title: 'Overdue Payment: CLM3003',
-    message: '₹70,000 pending for 32 days with MediSecure. Exceeds standard 30-day settlement window.',
+    alertId: 'ALT-NOVA-102',
+    claimId: 'CLM3001',
+    insuranceCompanyId: 'INS001',
+    insuranceCompanyName: 'Nova Health Insurance',
+    type: 'HIGH_PRIORITY',
+    severity: 'WARNING',
+    title: 'High Outstanding Bill: CLM3001',
+    message: '₹100,000 pending for 20 days on inpatient claim CLM3001 with Nova Health Insurance.',
     resolved: false,
-    createdAt: new Date(Date.now() - 4 * 3600000).toISOString()
+    createdAt: new Date(Date.now() - 5 * 3600000).toISOString()
   },
   {
     id: 'alt-3',
-    alertId: 'ALT-1001',
-    claimId: 'CLM1001',
-    type: 'DENIAL',
+    alertId: 'ALT-CARE-201',
+    claimId: 'CLM1002',
+    insuranceCompanyId: 'INS002',
+    insuranceCompanyName: 'CareShield Assurance',
+    type: 'HIGH_RISK',
     severity: 'CRITICAL',
-    title: 'Claim Denied: CLM1001',
-    message: 'Claim CLM1001 was denied by Nova Health Insurance due to: Eligibility Issue (Coverage expired).',
+    title: 'Prior Authorization Absent: CLM1002',
+    message: 'AI Risk engine detected missing pre-authorization documentation for high-cost surgery (₹48,000).',
     resolved: false,
-    createdAt: new Date(Date.now() - 6 * 3600000).toISOString()
+    createdAt: new Date(Date.now() - 1 * 3600000).toISOString()
   },
   {
     id: 'alt-4',
-    alertId: 'ALT-5001',
+    alertId: 'ALT-CARE-202',
     claimId: 'CLM5001',
+    insuranceCompanyId: 'INS002',
+    insuranceCompanyName: 'CareShield Assurance',
     type: 'PAYMENT',
     severity: 'SUCCESS',
     title: 'Payment Settled: CLM5001',
     message: 'Full settlement of ₹100,000 received for CLM5001 from CareShield.',
     resolved: true,
     createdAt: new Date(Date.now() - 1 * 3600000).toISOString()
+  },
+  {
+    id: 'alt-5',
+    alertId: 'ALT-MEDI-301',
+    claimId: 'CLM1003',
+    insuranceCompanyId: 'INS003',
+    insuranceCompanyName: 'MediSecure Benefits',
+    type: 'DENIAL',
+    severity: 'CRITICAL',
+    title: 'Invalid Coding / CPT Modifier: CLM1003',
+    message: 'Claim denied due to missing modifier -25 on consultation CPT 99214. Resubmission required.',
+    resolved: false,
+    createdAt: new Date(Date.now() - 3 * 3600000).toISOString()
+  },
+  {
+    id: 'alt-6',
+    alertId: 'ALT-MEDI-302',
+    claimId: 'CLM3003',
+    insuranceCompanyId: 'INS003',
+    insuranceCompanyName: 'MediSecure Benefits',
+    type: 'OVERDUE',
+    severity: 'CRITICAL',
+    title: 'A/R Overdue Threshold Exceeded: CLM3003',
+    message: '₹70,000 pending for 32 days with MediSecure Benefits. Exceeds standard 30-day settlement window.',
+    resolved: false,
+    createdAt: new Date(Date.now() - 7 * 3600000).toISOString()
+  },
+  {
+    id: 'alt-7',
+    alertId: 'ALT-HP-401',
+    claimId: 'CLM2060',
+    insuranceCompanyId: 'INS004',
+    insuranceCompanyName: 'HealthPrime Plan',
+    type: 'PAYMENT',
+    severity: 'WARNING',
+    title: 'Initial Remittance Advice Pending: CLM2060',
+    message: '₹85,000 submitted claim CLM2060 awaiting initial electronic remittance confirmation.',
+    resolved: false,
+    createdAt: new Date(Date.now() - 4 * 3600000).toISOString()
+  },
+  {
+    id: 'alt-8',
+    alertId: 'ALT-UNITY-501',
+    claimId: 'CLM2065',
+    insuranceCompanyId: 'INS005',
+    insuranceCompanyName: 'Unity Payer Network',
+    type: 'PAYMENT',
+    severity: 'INFO',
+    title: 'Partial Remittance Applied: CLM2065',
+    message: 'Partial payment of ₹15,000 recorded. ₹45,000 remains pending with Unity Payer Network.',
+    resolved: false,
+    createdAt: new Date(Date.now() - 8 * 3600000).toISOString()
   }
+];
+
+// Demo Insurance Companies
+export const demoCompanies = [
+  { id: 'INS001', companyId: 'INS001', companyCode: 'NOVA001', companyName: 'Nova Health Insurance', contactPerson: 'John Miller', email: 'nova@insurance.com', status: 'ACTIVE' },
+  { id: 'INS002', companyId: 'INS002', companyCode: 'CARE002', companyName: 'CareShield Assurance', contactPerson: 'Sarah Jenkins', email: 'careshield@insurance.com', status: 'ACTIVE' },
+  { id: 'INS003', companyId: 'INS003', companyCode: 'MEDI003', companyName: 'MediSecure Benefits', contactPerson: 'Robert Vance', email: 'medisecure@insurance.com', status: 'ACTIVE' },
+  { id: 'INS004', companyId: 'INS004', companyCode: 'HP004', companyName: 'HealthPrime Plan', contactPerson: 'Priya Patel', email: 'healthprime@insurance.com', status: 'ACTIVE' },
+  { id: 'INS005', companyId: 'INS005', companyCode: 'UNITY005', companyName: 'Unity Payer Network', contactPerson: 'David Chen', email: 'unity@insurance.com', status: 'ACTIVE' }
+];
+
+export const demoUsers = [
+  { id: 'u-admin-1', email: 'admin@rcminsight.demo', name: 'RCM Administrator', role: 'RCM_ADMIN', organizationName: 'National Revenue Cycle Management', accountStatus: 'ACTIVE' },
+  { id: 'u-admin-2', email: 'admin@rcminsight.com', name: 'RCM Administrator', role: 'RCM_ADMIN', organizationName: 'National Revenue Cycle Management', accountStatus: 'ACTIVE' },
+  { id: 'u-nova-1', email: 'nova@rcminsight.demo', name: 'Nova Insurance User', role: 'INSURANCE_COMPANY', companyId: 'INS001', companyName: 'Nova Health Insurance', accountStatus: 'ACTIVE' },
+  { id: 'u-nova-2', email: 'nova@insurance.com', name: 'John Miller', role: 'INSURANCE_COMPANY', companyId: 'INS001', companyName: 'Nova Health Insurance', accountStatus: 'ACTIVE' },
+  { id: 'u-care-1', email: 'careshield@rcminsight.demo', name: 'CareShield Adjudicator', role: 'INSURANCE_COMPANY', companyId: 'INS002', companyName: 'CareShield Assurance', accountStatus: 'ACTIVE' },
+  { id: 'u-medi-1', email: 'medisecure@rcminsight.demo', name: 'MediSecure Specialist', role: 'INSURANCE_COMPANY', companyId: 'INS003', companyName: 'MediSecure Benefits', accountStatus: 'ACTIVE' },
+  { id: 'u-prime-1', email: 'healthprime@rcminsight.demo', name: 'HealthPrime Reviewer', role: 'INSURANCE_COMPANY', companyId: 'INS004', companyName: 'HealthPrime Plan', accountStatus: 'ACTIVE' },
+  { id: 'u-unity-1', email: 'unity@rcminsight.demo', name: 'Unity Network Reviewer', role: 'INSURANCE_COMPANY', companyId: 'INS005', companyName: 'Unity Payer Network', accountStatus: 'ACTIVE' }
 ];
 
 // Helper functions for localStorage fallback
 export function getStoredClaims() {
+  let claims;
   try {
     const raw = localStorage.getItem(STORAGE_KEY_CLAIMS);
-    if (raw) return JSON.parse(raw);
+    claims = raw ? JSON.parse(raw) : [...initialDemoClaims];
+  } catch (e) {
+    claims = [...initialDemoClaims];
+  }
+
+  // Ensure all initial demo claims (including CLM4004 & CLM4005 denied claims) exist
+  const existingIds = new Set(claims.map((c) => c.claimId));
+  for (const initClaim of initialDemoClaims) {
+    if (!existingIds.has(initClaim.claimId)) {
+      claims.push({ ...initClaim });
+      existingIds.add(initClaim.claimId);
+    }
+  }
+
+  // Ensure insuranceCompanyId is populated on every claim
+  claims = claims.map((c) => {
+    const payer = ((c.payerName || '') + ' ' + (c.insuranceCompanyName || '')).toLowerCase();
+    if (payer.includes('nova')) { c.insuranceCompanyId = 'INS001'; c.insuranceCompanyName = 'Nova Health Insurance'; c.payerName = 'Nova Health Insurance'; }
+    else if (payer.includes('care') || payer.includes('shield')) { c.insuranceCompanyId = 'INS002'; c.insuranceCompanyName = 'CareShield Assurance'; c.payerName = 'CareShield Assurance'; }
+    else if (payer.includes('medi') || payer.includes('secure')) { c.insuranceCompanyId = 'INS003'; c.insuranceCompanyName = 'MediSecure Benefits'; c.payerName = 'MediSecure Benefits'; }
+    else if (payer.includes('prime') || payer.includes('healthprime')) { c.insuranceCompanyId = 'INS004'; c.insuranceCompanyName = 'HealthPrime Plan'; c.payerName = 'HealthPrime Plan'; }
+    else if (payer.includes('unity')) { c.insuranceCompanyId = 'INS005'; c.insuranceCompanyName = 'Unity Payer Network'; c.payerName = 'Unity Payer Network'; }
+    else { c.insuranceCompanyId = 'INS001'; c.insuranceCompanyName = 'Nova Health Insurance'; c.payerName = 'Nova Health Insurance'; }
+    return c;
+  });
+
+  // Strict backend-like data isolation for insurance companies
+  try {
+    const rawUser = localStorage.getItem('rcm_user');
+    if (rawUser) {
+      const user = JSON.parse(rawUser);
+      if (user.role === 'INSURANCE_COMPANY' && user.companyId) {
+        return claims.filter((c) => c.insuranceCompanyId === user.companyId);
+      }
+    }
   } catch (e) {}
-  localStorage.setItem(STORAGE_KEY_CLAIMS, JSON.stringify(initialDemoClaims));
-  return initialDemoClaims;
+
+  return claims;
+}
+
+export function getAllStoredClaims() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_CLAIMS);
+    return raw ? JSON.parse(raw) : [...initialDemoClaims];
+  } catch (e) {
+    return [...initialDemoClaims];
+  }
 }
 
 export function saveStoredClaims(claims) {
@@ -396,12 +616,39 @@ export function saveStoredClaims(claims) {
 }
 
 export function getStoredAlerts() {
+  let alerts;
   try {
     const raw = localStorage.getItem(STORAGE_KEY_ALERTS);
-    if (raw) return JSON.parse(raw);
+    alerts = raw ? JSON.parse(raw) : [...initialDemoAlerts];
+  } catch (e) {
+    alerts = [...initialDemoAlerts];
+  }
+
+  // Ensure insuranceCompanyId is set on every alert
+  alerts = alerts.map((a) => {
+    if (!a.insuranceCompanyId) {
+      const text = ((a.title || '') + ' ' + (a.message || '')).toLowerCase();
+      if (text.includes('care') || text.includes('shield')) { a.insuranceCompanyId = 'INS002'; a.insuranceCompanyName = 'CareShield Assurance'; }
+      else if (text.includes('medi') || text.includes('secure')) { a.insuranceCompanyId = 'INS003'; a.insuranceCompanyName = 'MediSecure Benefits'; }
+      else if (text.includes('prime')) { a.insuranceCompanyId = 'INS004'; a.insuranceCompanyName = 'HealthPrime Plan'; }
+      else if (text.includes('unity')) { a.insuranceCompanyId = 'INS005'; a.insuranceCompanyName = 'Unity Payer Network'; }
+      else { a.insuranceCompanyId = 'INS001'; a.insuranceCompanyName = 'Nova Health Insurance'; }
+    }
+    return a;
+  });
+
+  // Strict isolation for Insurance Company in local storage mode
+  try {
+    const rawUser = localStorage.getItem('rcm_user');
+    if (rawUser) {
+      const user = JSON.parse(rawUser);
+      if (user.role === 'INSURANCE_COMPANY' && user.companyId) {
+        return alerts.filter((a) => a.insuranceCompanyId === user.companyId);
+      }
+    }
   } catch (e) {}
-  localStorage.setItem(STORAGE_KEY_ALERTS, JSON.stringify(initialDemoAlerts));
-  return initialDemoAlerts;
+
+  return alerts;
 }
 
 export function saveStoredAlerts(alerts) {

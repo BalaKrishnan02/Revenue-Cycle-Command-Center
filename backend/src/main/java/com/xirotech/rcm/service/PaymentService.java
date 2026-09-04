@@ -8,6 +8,8 @@ import com.xirotech.rcm.model.Payment;
 import com.xirotech.rcm.repository.ClaimHistoryRepository;
 import com.xirotech.rcm.repository.ClaimRepository;
 import com.xirotech.rcm.repository.PaymentRepository;
+import com.xirotech.rcm.security.SecurityUtils;
+import com.xirotech.rcm.security.UserPrincipal;
 import com.xirotech.rcm.websocket.LiveUpdateService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +33,12 @@ public class PaymentService {
     private final ArAgingService arAgingService;
 
     public List<Payment> getAllPayments() {
+        UserPrincipal user = SecurityUtils.getCurrentUser();
+        if (user != null && "INSURANCE_COMPANY".equalsIgnoreCase(user.getRole())) {
+            String companyId = user.getCompanyId();
+            log.info("Enforcing payment data isolation: fetching payments exclusively for companyId={}", companyId);
+            return paymentRepository.findByInsuranceCompanyIdOrderByCreatedAtDesc(companyId);
+        }
         return paymentRepository.findAllByOrderByCreatedAtDesc();
     }
 
@@ -56,10 +64,12 @@ public class PaymentService {
 
         String paymentId = "PAY-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
-        // 1. Create Payment Transaction Record
+        // 1. Create Payment Transaction Record with company info
         Payment payment = Payment.builder()
                 .paymentId(paymentId)
                 .claimId(claim.getClaimId())
+                .insuranceCompanyId(claim.getInsuranceCompanyId())
+                .insuranceCompanyName(claim.getInsuranceCompanyName())
                 .payerName(claim.getPayerName())
                 .claimAmount(totalBill)
                 .paidAmount(amountToPay)

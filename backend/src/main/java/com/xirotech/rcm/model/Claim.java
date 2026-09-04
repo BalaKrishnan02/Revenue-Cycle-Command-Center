@@ -29,7 +29,13 @@ public class Claim {
 
     private String patientName;
     private String patientReference;
-    private String payerName;
+
+    // Insurance Company Details
+    @Indexed
+    private String insuranceCompanyId;   // e.g. "INS001"
+    private String insuranceCompanyName; // e.g. "Nova Health Insurance"
+
+    private String payerName; // Kept synced with insuranceCompanyName for backwards compatibility
     private String payerType; // PRIVATE, MEDICARE, MEDICAID, COMMERCIAL
     private double claimAmount;
 
@@ -75,6 +81,9 @@ public class Claim {
     private List<String> recommendations = new ArrayList<>();
 
     private String denialReason;
+    private String insurerComments;
+    private Instant reviewedAt;
+    private String reviewedBy;
     
     // Payment Status: UNPAID, PARTIALLY_PAID, PAID, PENDING_PAYER, OVERDUE
     private String paymentStatus;
