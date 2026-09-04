@@ -13,7 +13,11 @@ import {
   ArrowRight
 } from 'lucide-react';
 
-export default function ClaimTimeline({ history = [], currentStatus = 'CREATED', createdAt = null }) {
+export default function ClaimTimeline({
+  history = [],
+  currentStatus = 'CREATED',
+  createdAt = null
+}) {
   // Configuration for each lifecycle stage's colors and styling
   const getStageConfig = (status) => {
     const s = (status || '').toUpperCase();
@@ -158,7 +162,6 @@ export default function ClaimTimeline({ history = [], currentStatus = 'CREATED',
     }
   };
 
-  // If history is empty, generate an initial timeline entry so it's never empty
   const events = (history && history.length > 0)
     ? history
     : [
@@ -220,9 +223,7 @@ export default function ClaimTimeline({ history = [], currentStatus = 'CREATED',
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       
-      {/* ========================================================================= */}
-      {/* 1. VISUAL PROCESS STAGE STEPPER (Shows color-coded stage progress)        */}
-      {/* ========================================================================= */}
+      {/* 1. VISUAL PROCESS STAGE STEPPER */}
       <div style={{
         background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
         border: '1px solid #e2e8f0',
@@ -322,49 +323,7 @@ export default function ClaimTimeline({ history = [], currentStatus = 'CREATED',
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* 2. STAGE COLOR LEGEND STRIP                                              */}
-      {/* ========================================================================= */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '0.5rem',
-        padding: '0.5rem 0.75rem',
-        backgroundColor: '#ffffff',
-        border: '1px solid #e2e8f0',
-        borderRadius: '8px',
-        fontSize: '0.7rem'
-      }}>
-        <span style={{ fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Stage Colors:</span>
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', color: '#1d4ed8' }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#2563eb' }} />
-            Created / Submitted
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', color: '#6d28d9' }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#7c3aed' }} />
-            AI Checked / Corrected
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', color: '#b91c1c' }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#dc2626' }} />
-            Denied / High Risk
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', color: '#b45309' }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#f59e0b' }} />
-            Pending
-          </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', color: '#047857' }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#059669' }} />
-            Accepted / Paid
-          </span>
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 3. COLOR-CODED AUDIT TIMELINE STREAM                                     */}
-      {/* ========================================================================= */}
+      {/* 2. AUDIT TIMELINE STREAM */}
       <div style={{ position: 'relative', paddingLeft: '1.5rem' }}>
         {/* Vertical Connecting Line */}
         <div style={{
@@ -429,8 +388,7 @@ export default function ClaimTimeline({ history = [], currentStatus = 'CREATED',
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      {/* Colored Stage Pill Badge */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                       <span
                         style={{
                           display: 'inline-flex',

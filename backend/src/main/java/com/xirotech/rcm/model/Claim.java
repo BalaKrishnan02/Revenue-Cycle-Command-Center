@@ -30,6 +30,7 @@ public class Claim {
     private String patientName;
     private String patientReference;
     private String patientEmail;
+    private boolean patientEmailVerified;
 
     // Insurance Company Details
     @Indexed

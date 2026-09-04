@@ -57,6 +57,21 @@ public class LifecycleEmailService {
                 ? claim.getPatientEmail().trim()
                 : defaultRecipient;
 
+        // Check if an email for this claim at this stage and status was already sent (strictly one email per stage)
+        if (claim.getClaimId() != null) {
+            List<ClaimEmailNotification> existing = emailRepository.findByClaimIdOrderBySentAtDesc(claim.getClaimId());
+            boolean alreadySent = existing.stream().anyMatch(e ->
+                    e.getStageIndex() == stageIndex &&
+                    e.getClaimStatus() != null &&
+                    e.getClaimStatus().equalsIgnoreCase(claim.getStatus())
+            );
+            if (alreadySent) {
+                log.info("Email for claim {} at stage {} ({}) already sent. Skipping duplicate.",
+                        claim.getClaimId(), stageIndex, claim.getStatus());
+                return existing.stream().filter(e -> e.getStageIndex() == stageIndex).findFirst().orElse(null);
+            }
+        }
+
         String subject = generateSubject(claim, stageIndex, stageName);
         String htmlBody = buildLifecycleEmailHtml(claim, stageIndex, stageName, stageDescription, recipient);
 
@@ -106,6 +121,45 @@ public class LifecycleEmailService {
                 .build();
 
         return emailRepository.save(notification);
+    }
+
+    public boolean sendVerificationOtpEmail(String recipient, String patientId, String otp) {
+        if (!mailEnabled || recipient == null || recipient.isBlank()) {
+            return false;
+        }
+
+        String subject = "[RCM Insight] Patient Email Verification OTP: " + otp;
+        String htmlBody = "<!DOCTYPE html><html><body style=\"font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; padding: 20px; color: #1e293b;\">" +
+                "<div style=\"max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);\">" +
+                "  <div style=\"background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 20px 24px;\">" +
+                "    <h2 style=\"color: #ffffff; margin: 0; font-size: 18px;\"><span style=\"color: #38bdf8;\">⚡</span> RCM Insight Patient Verification</h2>" +
+                "  </div>" +
+                "  <div style=\"padding: 24px;\">" +
+                "    <p style=\"font-size: 14px; margin-top: 0; color: #475569;\">You are registering a patient record in RCM Command Center for Patient ID: <strong>" + patientId + "</strong>.</p>" +
+                "    <p style=\"font-size: 14px; color: #475569;\">Use the one-time verification code below to verify this email address:</p>" +
+                "    <div style=\"background: #eff6ff; border: 1px dashed #3b82f6; border-radius: 8px; padding: 16px; text-align: center; margin: 20px 0;\">" +
+                "      <span style=\"font-size: 28px; font-weight: 800; letter-spacing: 6px; color: #1d4ed8;\">" + otp + "</span>" +
+                "    </div>" +
+                "    <p style=\"font-size: 12px; color: #64748b; margin-bottom: 0;\">This OTP is valid for 10 minutes and is exclusively linked to patient reference <strong>" + patientId + "</strong>.</p>" +
+                "  </div>" +
+                "</div></body></html>";
+
+        if (mailSender != null && mailUsername != null && !mailUsername.isBlank()) {
+            try {
+                MimeMessage message = mailSender.createMimeMessage();
+                MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+                helper.setFrom(mailFrom != null && !mailFrom.isBlank() ? mailFrom : mailUsername, "RCM Insight Command Center");
+                helper.setTo(recipient.trim());
+                helper.setSubject(subject);
+                helper.setText(htmlBody, true);
+                mailSender.send(message);
+                log.info("Sent verification OTP email to {} for patient {}", recipient, patientId);
+                return true;
+            } catch (Exception e) {
+                log.warn("Failed to dispatch verification OTP via SMTP: {}", e.getMessage());
+            }
+        }
+        return false;
     }
 
     public List<ClaimEmailNotification> getEmailsForClaim(String claimId) {

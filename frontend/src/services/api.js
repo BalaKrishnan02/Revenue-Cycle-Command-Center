@@ -10,9 +10,9 @@ import {
   getDemoDailyStats,
   demoCompanies,
   demoUsers
-} from './demoFallback';
+} from './demoFallback.js';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || 'http://localhost:8080/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -233,6 +233,15 @@ export const createClaim = async (claimData) => {
       };
       claims.unshift(newClaim);
       saveStoredClaims(claims);
+
+      // Auto-dispatch Stage 1 Email
+      recordDemoStageEmail(
+        newClaim,
+        1,
+        'Stage 1: Claim Intake & Registration Complete',
+        `Claim ${generatedId} successfully registered in RCM Command Center with bill amount ₹${totalBill.toLocaleString()}. Next milestone: AI Pre-Audit Risk Analysis.`
+      );
+
       return { data: newClaim };
     }
     throw err;
@@ -258,6 +267,15 @@ export const predictClaimRisk = async (id) => {
       claim.detectedReasons = ['Clean Claim Quality Metrics'];
       claim.recommendations = ['Claim passes pre-submission checks. Ready for immediate payer submission.'];
       saveStoredClaims(claims);
+
+      // Auto-dispatch Stage 2 Email
+      recordDemoStageEmail(
+        claim,
+        2,
+        'Stage 2: AI Pre-Audit Risk Analysis Complete',
+        `AI pre-submission audit completed with estimated denial risk of 22% (LOW Risk). Recommendation: Ready for immediate payer submission.`
+      );
+
       return { data: claim };
     }
     throw err;
@@ -273,6 +291,15 @@ export const submitClaim = async (id) => {
       const claim = claims.find((c) => c.claimId === id || c.id === id) || claims[0];
       claim.status = 'ACCEPTED';
       saveStoredClaims(claims);
+
+      // Auto-dispatch Stage 3 Email
+      recordDemoStageEmail(
+        claim,
+        3,
+        'Stage 3: Electronic EDI 837 Submission Dispatched',
+        `Claim electronically transmitted to ${claim.payerName || 'Payer'}. Electronic EDI 837 data interchange confirmed.`
+      );
+
       return { data: claim };
     }
     throw err;
@@ -304,6 +331,15 @@ export const resubmitClaim = async (id) => {
       const claim = claims.find((c) => c.claimId === id || c.id === id) || claims[0];
       claim.status = 'ACCEPTED';
       saveStoredClaims(claims);
+
+      // Auto-dispatch Stage 3 Resubmission Email
+      recordDemoStageEmail(
+        claim,
+        3,
+        'Stage 3: Electronic EDI 837 Resubmission Dispatched',
+        `Corrected claim resubmitted to payer ${claim.payerName || 'Payer'} for secondary adjudication review.`
+      );
+
       return { data: claim };
     }
     throw err;
@@ -319,6 +355,15 @@ export const acceptClaim = async (id) => {
       const claim = claims.find((c) => c.claimId === id || c.id === id) || claims[0];
       claim.status = 'ACCEPTED';
       saveStoredClaims(claims);
+
+      // Auto-dispatch Stage 4 Adjudication Email
+      recordDemoStageEmail(
+        claim,
+        4,
+        'Stage 4: Payer Adjudication (ACCEPTED)',
+        `Claim approved by ${claim.payerName || 'Payer'}. Ready for financial reimbursement and settlement disbursement.`
+      );
+
       return { data: claim };
     }
     throw err;
@@ -335,6 +380,15 @@ export const denyClaim = async (id, reason) => {
       claim.status = 'DENIED';
       claim.denialReason = reason || 'Eligibility Issue: Coverage expired';
       saveStoredClaims(claims);
+
+      // Auto-dispatch Stage 4 Denial Email
+      recordDemoStageEmail(
+        claim,
+        4,
+        'Stage 4: Payer Adjudication (DENIED)',
+        `Claim denial issued by ${claim.payerName || 'Payer'}. Denial reason: ${claim.denialReason}`
+      );
+
       return { data: claim };
     }
     throw err;
@@ -371,6 +425,15 @@ export const payClaim = async (id, paymentData = {}) => {
         claims[idx].billingPriorityScore = 0;
         claims[idx].billingPriority = 'LOW';
         saveStoredClaims(claims);
+
+        // Auto-dispatch Stage 5 Email
+        recordDemoStageEmail(
+          claims[idx],
+          5,
+          'Stage 5: Final Payment Settlement Disbursed',
+          `Full reimbursement settlement of ₹${(claims[idx].paidAmount || 0).toLocaleString()} disbursed successfully.`
+        );
+
         return { data: claims[idx] };
       }
     }
@@ -401,6 +464,15 @@ export const recordPartialPayment = async (id, paymentData = {}) => {
           claims[idx].billingPriorityScore = Math.max(25, (claims[idx].billingPriorityScore || 70) - 20);
         }
         saveStoredClaims(claims);
+
+        // Auto-dispatch Stage 5 Email
+        recordDemoStageEmail(
+          claims[idx],
+          5,
+          'Stage 5: Payment Remittance Recorded (Partial)',
+          `Partial payment remittance of ₹${amt.toLocaleString()} recorded. Remaining balance: ₹${claims[idx].pendingAmount.toLocaleString()}.`
+        );
+
         return { data: claims[idx] };
       }
     }
@@ -410,15 +482,74 @@ export const recordPartialPayment = async (id, paymentData = {}) => {
 
 export const recordFollowUp = (id, notes = '') => api.post(`/claims/${id}/follow-up`, { notes });
 
-// Lifecycle Email Notifications
+// Lifecycle Email Notifications & Step-by-Step Dispatch
+export const getStoredClaimEmails = (claimId) => {
+  try {
+    const raw = localStorage.getItem(`rcm_emails_${claimId}`);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+
+export const recordDemoStageEmail = (claim, stageIndex, stageName, stageDesc, targetEmail = '') => {
+  try {
+    const cid = claim.claimId || claim.id;
+    const recipient = targetEmail || claim.patientEmail || 'balakrishnan206k@gmail.com';
+    const list = getStoredClaimEmails(cid);
+
+    // Strictly ensure only one email per stage index for this claim
+    const alreadySent = list.find((e) => e.stageIndex === stageIndex);
+    if (alreadySent && !targetEmail) {
+      return alreadySent;
+    }
+
+    const notif = {
+      id: 'em-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+      claimId: cid,
+      patientEmail: recipient,
+      patientName: claim.patientName || 'Valued Patient',
+      patientReference: claim.patientReference || 'N/A',
+      stageIndex: stageIndex,
+      stageName: stageName,
+      claimStatus: claim.status || 'CREATED',
+      billedAmount: claim.totalBillAmount || claim.claimAmount || 0,
+      payerName: claim.insuranceCompanyName || claim.payerName || 'Insurance Payer',
+      subject: `[RCM Insight] Claim ${cid} — ${stageName}`,
+      htmlBody: `<p>Hello <strong>${claim.patientName || 'Valued Patient'}</strong>,</p><p>${stageDesc || 'Progress update recorded for your claim.'}</p>`,
+      deliveryStatus: 'DISPATCHED_SMTP',
+      deliveryDetails: `Dispatched step-by-step to ${recipient}`,
+      sentAt: new Date().toISOString()
+    };
+    list.unshift(notif);
+    localStorage.setItem(`rcm_emails_${cid}`, JSON.stringify(list));
+    return notif;
+  } catch {
+    return null;
+  }
+};
+
 export const getClaimEmails = (id) =>
   safeRequest(
     () => api.get(`/claims/${id}/emails`),
-    () => []
+    () => getStoredClaimEmails(id)
   );
 
 export const sendClaimStageEmail = (id, email = '') =>
-  api.post(`/claims/${id}/send-stage-email`, email ? { email } : {});
+  safeRequest(
+    () => api.post(`/claims/${id}/send-stage-email`, email ? { email } : {}),
+    () => {
+      const claims = getStoredClaims();
+      const claim = claims.find((c) => c.claimId === id || c.id === id) || { claimId: id, patientEmail: email };
+      return recordDemoStageEmail(
+        claim,
+        claim.status === 'PAID' ? 5 : (['ACCEPTED', 'DENIED', 'PENDING'].includes(claim.status) ? 4 : (['SUBMITTED', 'RESUBMITTED'].includes(claim.status) ? 3 : (['AI_CHECKED', 'HIGH_RISK', 'READY_TO_SUBMIT', 'CORRECTED'].includes(claim.status) ? 2 : 1))),
+        `Stage Progress Update (${claim.status || 'CREATED'})`,
+        `Manual lifecycle progress dispatch requested for ${id}.`,
+        email
+      );
+    }
+  );
 
 
 // Alerts
@@ -687,5 +818,107 @@ export const reviewClaim = (id, reviewData) =>
     }
   );
 
+// ==========================================
+// Isolated Patient Email Verification APIs
+// ==========================================
+// Isolated in-memory fallback store strictly partitioned by patientId::email
+const demoVerificationStore = new Map();
+
+export const sendPatientOtp = (patientId, email) =>
+  safeRequest(
+    () => api.post('/patient-verification/send-otp', { patientId, email }),
+    () => {
+      const sanitizedPid = (patientId || '').trim();
+      const sanitizedEmail = (email || '').trim().toLowerCase();
+      const key = `${sanitizedPid}::${sanitizedEmail}`;
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiry = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+      demoVerificationStore.set(key, {
+        patientId: sanitizedPid,
+        email: sanitizedEmail,
+        otp,
+        otpExpiry: expiry,
+        emailVerified: false,
+        verifiedAt: null
+      });
+
+      console.log(`[Demo Verification] OTP for ${sanitizedPid} (${sanitizedEmail}): ${otp}`);
+      return {
+        success: true,
+        message: `Verification OTP sent to ${sanitizedEmail}`,
+        patientId: sanitizedPid,
+        email: sanitizedEmail,
+        devOtp: otp,
+        expiresAt: expiry
+      };
+    }
+  );
+
+export const verifyPatientOtp = (patientId, email, otp) =>
+  safeRequest(
+    () => api.post('/patient-verification/verify-otp', { patientId, email, otp }),
+    () => {
+      const sanitizedPid = (patientId || '').trim();
+      const sanitizedEmail = (email || '').trim().toLowerCase();
+      const key = `${sanitizedPid}::${sanitizedEmail}`;
+      const record = demoVerificationStore.get(key);
+
+      if (!record) {
+        return {
+          verified: false,
+          message: `No verification record found for patient ${sanitizedPid}`
+        };
+      }
+
+      if (record.otp !== (otp || '').trim()) {
+        return {
+          verified: false,
+          message: 'Invalid OTP code. Please enter the correct code.'
+        };
+      }
+
+      record.emailVerified = true;
+      record.verifiedAt = new Date().toISOString();
+      record.otp = null; // Consumed
+
+      return {
+        verified: true,
+        patientId: sanitizedPid,
+        email: sanitizedEmail,
+        message: `Email verified successfully for ${sanitizedPid}`,
+        verifiedAt: record.verifiedAt
+      };
+    }
+  );
+
+export const getPatientVerificationStatus = (patientId, email) =>
+  safeRequest(
+    () => api.get(`/patient-verification/status?patientId=${encodeURIComponent(patientId)}&email=${encodeURIComponent(email)}`),
+    () => {
+      const key = `${(patientId || '').trim()}::${(email || '').trim().toLowerCase()}`;
+      const record = demoVerificationStore.get(key);
+      return {
+        emailVerified: !!record?.emailVerified,
+        patientId,
+        email
+      };
+    }
+  );
+
+export const clearPatientVerification = (patientId) =>
+  safeRequest(
+    () => api.post('/patient-verification/clear', { patientId }),
+    () => {
+      for (const [k, v] of demoVerificationStore.entries()) {
+        if (v.patientId === (patientId || '').trim()) {
+          demoVerificationStore.delete(k);
+        }
+      }
+      return { message: 'Verification state cleared' };
+    }
+  );
+
 export default api;
+
 

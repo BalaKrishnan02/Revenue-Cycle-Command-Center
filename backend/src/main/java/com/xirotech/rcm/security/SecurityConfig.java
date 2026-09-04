@@ -66,8 +66,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Permit preflight OPTIONS
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        // Public auth & health endpoints
+                        // Public auth, verification & health endpoints
                         .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers("/api/patient-verification/**").permitAll()
                         .requestMatchers("/api/insurance-companies/public").permitAll()
                         .requestMatchers("/api/health").permitAll()
                         .requestMatchers("/ws/**").permitAll()

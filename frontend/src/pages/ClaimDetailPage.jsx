@@ -844,6 +844,9 @@ export default function ClaimDetailPage() {
                 }}>
                   <Mail size={12} />
                   {claim.patientEmail || 'balakrishnan206k@gmail.com'}
+                  {claim.patientEmailVerified && (
+                    <span style={{ marginLeft: '0.25rem', color: '#10b981', fontWeight: '800' }} title="Verified Patient Email">✓</span>
+                  )}
                 </span>
 
                 <button

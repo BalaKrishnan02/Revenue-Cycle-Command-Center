@@ -19,11 +19,12 @@ import { createClaim, predictClaimRisk } from '../services/api';
 export default function CreateClaimPage() {
   const navigate = useNavigate();
 
+  // Fresh, clean patient form data - starts completely blank per patient with no shared state
   const [formData, setFormData] = useState({
     claimId: '',
     patientName: '',
     patientReference: '',
-    patientEmail: 'balakrishnan206k@gmail.com',
+    patientEmail: '',
     payerName: 'Nova Health Insurance',
     payerType: 'PRIVATE',
     claimAmount: 25000,
@@ -63,6 +64,7 @@ export default function CreateClaimPage() {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: null }));
     }
@@ -83,8 +85,11 @@ export default function CreateClaimPage() {
       if (runCheckAfter) setCheckingRisk(true);
       else setSubmitting(true);
 
+      const patientRef = formData.patientReference.trim() || `PT-${Math.floor(1000 + Math.random() * 9000)}`;
+
       const res = await createClaim({
         ...formData,
+        patientReference: patientRef,
         claimAmount: Number(formData.claimAmount),
         previousDenials: Number(formData.previousDenials || 0)
       });
@@ -106,13 +111,13 @@ export default function CreateClaimPage() {
     }
   };
 
-  // Demo shortcut filler
+  // Demo shortcut fillers with isolated patient identities
   const fillScenarioOne = () => {
     setFormData({
       claimId: 'CLM2055',
-      patientName: 'Demo Patient',
+      patientName: 'Demo Patient 1',
       patientReference: 'PT-2055',
-      patientEmail: 'balakrishnan206k@gmail.com',
+      patientEmail: 'patient1@demohealth.com',
       payerName: 'Nova Health Insurance',
       payerType: 'PRIVATE',
       claimAmount: 25000,
@@ -129,7 +134,7 @@ export default function CreateClaimPage() {
       claimId: 'CLM2056',
       patientName: 'Demo Patient 2',
       patientReference: 'PT-2056',
-      patientEmail: 'balakrishnan206k@gmail.com',
+      patientEmail: 'patient2@demohealth.com',
       payerName: 'Nova Health Insurance',
       payerType: 'PRIVATE',
       claimAmount: 32000,
@@ -157,11 +162,11 @@ export default function CreateClaimPage() {
 
         {/* Demo Fast Fillers */}
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button type="button" onClick={fillScenarioOne} className="btn btn-secondary btn-sm" title="Fill Scenario 1 (Missing Auth Demo)">
-            ⚡ Quick Fill: Scenario 1 (CLM2055)
+          <button type="button" onClick={fillScenarioOne} className="btn btn-secondary btn-sm" title="Fill Patient 1 (CLM2055)">
+            ⚡ Quick Fill: Patient 1 (CLM2055)
           </button>
-          <button type="button" onClick={fillScenarioTwo} className="btn btn-secondary btn-sm" title="Fill Scenario 2 (Denial Demo)">
-            ⚡ Scenario 2 (CLM2056)
+          <button type="button" onClick={fillScenarioTwo} className="btn btn-secondary btn-sm" title="Fill Patient 2 (CLM2056)">
+            ⚡ Patient 2 (CLM2056)
           </button>
         </div>
       </div>
@@ -193,7 +198,7 @@ export default function CreateClaimPage() {
                 type="text"
                 name="patientName"
                 className="form-control"
-                placeholder="e.g. Demo Patient"
+                placeholder="e.g. Patient Full Name"
                 value={formData.patientName}
                 onChange={handleChange}
               />
@@ -215,39 +220,20 @@ export default function CreateClaimPage() {
             </div>
 
             <div className="form-group">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
-                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: 0 }}>
-                  <Mail size={14} color="#2563eb" />
-                  Patient / User Email Address
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setFormData((p) => ({ ...p, patientEmail: 'balakrishnan206k@gmail.com' }))}
-                  style={{
-                    background: '#eff6ff',
-                    border: '1px solid #bfdbfe',
-                    color: '#1d4ed8',
-                    fontSize: '0.7rem',
-                    fontWeight: '600',
-                    padding: '0.15rem 0.5rem',
-                    borderRadius: '9999px',
-                    cursor: 'pointer'
-                  }}
-                  title="Click to fill balakrishnan206k@gmail.com"
-                >
-                  ⚡ My Email
-                </button>
-              </div>
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <Mail size={14} color="#2563eb" />
+                Patient Email Address
+              </label>
               <input
                 type="email"
                 name="patientEmail"
                 className="form-control"
-                placeholder="balakrishnan206k@gmail.com"
+                placeholder="e.g. patient@example.com"
                 value={formData.patientEmail}
                 onChange={handleChange}
               />
-              <span style={{ fontSize: '0.73rem', color: '#2563eb', display: 'block', marginTop: '0.25rem' }}>
-                📬 <strong>Process Lifecycle Progress:</strong> Automatic updates sent at each stage (Intake → AI Audit → Submission → Adjudication → Settlement)
+              <span style={{ fontSize: '0.73rem', color: '#64748b', display: 'block', marginTop: '0.25rem' }}>
+                📬 Lifecycle stage notifications are dispatched to this address.
               </span>
             </div>
           </div>
