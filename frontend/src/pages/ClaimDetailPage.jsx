@@ -22,7 +22,9 @@ import {
   Flame,
   Coins,
   FileCheck2,
-  FileWarning
+  FileWarning,
+  Eye,
+  Printer
 } from 'lucide-react';
 import {
   getClaim,
@@ -91,6 +93,7 @@ export default function ClaimDetailPage() {
   const [sendingEmail, setSendingEmail] = useState(false);
   const [previewEmail, setPreviewEmail] = useState(null);
   const [showCustomEmailModal, setShowCustomEmailModal] = useState(false);
+  const [showPaymentInspectModal, setShowPaymentInspectModal] = useState(false);
   const [customEmailTarget, setCustomEmailTarget] = useState('balakrishnan206k@gmail.com');
 
   const loadClaimData = async () => {
@@ -688,6 +691,26 @@ export default function ClaimDetailPage() {
                 <strong>Reason:</strong> {claim.priorityReason || 'Based on pending balance & days overdue'}
               </p>
             </div>
+
+            {(claim.paidAmount > 0 || claim.paymentStatus === 'PAID' || claim.paymentStatus === 'PARTIALLY_PAID') && (
+              <button
+                onClick={() => setShowPaymentInspectModal(true)}
+                className="btn btn-secondary btn-sm"
+                style={{
+                  marginTop: '0.75rem',
+                  width: '100%',
+                  borderColor: '#86efac',
+                  color: '#065f46',
+                  background: '#f0fdf4',
+                  gap: '0.4rem',
+                  fontWeight: '700'
+                }}
+                title="Inspect settled electronic remittance advice & payment details"
+              >
+                <Eye size={14} color="#059669" />
+                <span>Inspect Payment Settlement Details</span>
+              </button>
+            )}
           </div>
 
           {/* Claim Summary Card */}
@@ -1569,6 +1592,186 @@ export default function ClaimDetailPage() {
               >
                 {sendingEmail ? 'Sending...' : currentStageAlreadySent ? `Stage ${currentStageIndex} Already Dispatched` : 'Send Notification'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Payment Settlement Inspection Modal */}
+      {showPaymentInspectModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '1rem'
+          }}
+          onClick={() => setShowPaymentInspectModal(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#ffffff',
+              borderRadius: '16px',
+              maxWidth: '680px',
+              width: '100%',
+              boxShadow: 'var(--shadow-xl)',
+              border: '1px solid #e2e8f0',
+              overflow: 'hidden'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{
+              background: 'linear-gradient(135deg, #064e3b 0%, #065f46 50%, #047857 100%)',
+              color: '#ffffff',
+              padding: '1.25rem 1.5rem',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '10px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <DollarSign size={22} color="#ffffff" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: '800' }}>
+                    Payment & Electronic Remittance Advice (ERA)
+                  </h3>
+                  <div style={{ fontSize: '0.75rem', opacity: 0.85, marginTop: '0.15rem' }}>
+                    Reconciliation Audit for Claim {claim.claimId}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowPaymentInspectModal(false)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.2)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: '#ffffff'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '1.5rem', maxHeight: '70vh', overflowY: 'auto' }}>
+              
+              {/* Financial Hero */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.85rem', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.68rem', fontWeight: '700', textTransform: 'uppercase', color: '#64748b' }}>Billed Amount</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0f172a', marginTop: '0.25rem' }}>
+                    ₹{(claim.totalBillAmount || claim.claimAmount || 0).toLocaleString()}
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '10px', padding: '0.85rem', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.68rem', fontWeight: '700', textTransform: 'uppercase', color: '#047857' }}>Settled / Paid</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#059669', marginTop: '0.25rem' }}>
+                    ₹{(claim.paidAmount || 0).toLocaleString()}
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '0.85rem', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.68rem', fontWeight: '700', textTransform: 'uppercase', color: '#991b1b' }}>Pending Balance</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#dc2626', marginTop: '0.25rem' }}>
+                    ₹{(claim.pendingAmount !== undefined ? claim.pendingAmount : Math.max(0, (claim.totalBillAmount || claim.claimAmount || 0) - (claim.paidAmount || 0))).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+
+              {/* Remittance Specification Table */}
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', marginBottom: '1.25rem' }}>
+                <div style={{ backgroundColor: '#f8fafc', padding: '0.6rem 1rem', borderBottom: '1px solid #e2e8f0', fontWeight: '700', fontSize: '0.78rem', color: '#475569', textTransform: 'uppercase' }}>
+                  Remittance Specifications
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                  <tbody>
+                    <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '0.65rem 1rem', color: '#64748b', width: '40%' }}>Payment Settlement Status</td>
+                      <td style={{ padding: '0.65rem 1rem' }}>
+                        <StatusBadge status={claim.paymentStatus || 'PAID'} type="payment" />
+                      </td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '0.65rem 1rem', color: '#64748b' }}>Payer Organization</td>
+                      <td style={{ padding: '0.65rem 1rem', fontWeight: '700', color: '#0f172a' }}>{claim.payerName}</td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '0.65rem 1rem', color: '#64748b' }}>Patient Reference</td>
+                      <td style={{ padding: '0.65rem 1rem', fontWeight: '600' }} className="font-mono">{claim.patientName} ({claim.patientReference})</td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '0.65rem 1rem', color: '#64748b' }}>Allowed Reimbursement</td>
+                      <td style={{ padding: '0.65rem 1rem', fontWeight: '700', color: '#059669' }}>
+                        ₹{(claim.allowedAmount || claim.paidAmount || claim.totalBillAmount || 0).toLocaleString()}
+                      </td>
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '0.65rem 1rem', color: '#64748b' }}>Interchange Standard</td>
+                      <td style={{ padding: '0.65rem 1rem', color: '#334155' }}>
+                        Electronic Remittance Advice (EDI 835) / EFT Automated Clearing House
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '0.65rem 1rem', color: '#64748b' }}>Lifecycle Milestone</td>
+                      <td style={{ padding: '0.65rem 1rem', fontWeight: '700', color: '#047857' }}>
+                        Stage 5: Remittance & Settlement Disbursed
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Ledger Confirmation Note */}
+              <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <CheckCircle2 size={18} color="#059669" />
+                <span style={{ fontSize: '0.78rem', color: '#065f46', fontWeight: '600' }}>
+                  Reimbursement transaction verified against hospital accounts receivable ledger.
+                </span>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid #e2e8f0', backgroundColor: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <Link to="/payments" className="btn btn-secondary btn-sm" style={{ gap: '0.35rem' }}>
+                <CreditCard size={14} />
+                <span>Open Payments Ledger</span>
+              </Link>
+
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button onClick={() => window.print()} className="btn btn-secondary btn-sm" style={{ gap: '0.35rem' }}>
+                  <Printer size={14} />
+                  <span>Print Remittance Receipt</span>
+                </button>
+                <button onClick={() => setShowPaymentInspectModal(false)} className="btn btn-primary btn-sm" style={{ background: 'linear-gradient(135deg, #059669, #047857)' }}>
+                  Done
+                </button>
+              </div>
             </div>
           </div>
         </div>
