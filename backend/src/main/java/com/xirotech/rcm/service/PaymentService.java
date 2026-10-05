@@ -34,12 +34,6 @@ public class PaymentService {
     private final LifecycleEmailService lifecycleEmailService;
 
     public List<Payment> getAllPayments() {
-        UserPrincipal user = SecurityUtils.getCurrentUser();
-        if (user != null && "INSURANCE_COMPANY".equalsIgnoreCase(user.getRole())) {
-            String companyId = user.getCompanyId();
-            log.info("Enforcing payment data isolation: fetching payments exclusively for companyId={}", companyId);
-            return paymentRepository.findByInsuranceCompanyIdOrderByCreatedAtDesc(companyId);
-        }
         return paymentRepository.findAllByOrderByCreatedAtDesc();
     }
 

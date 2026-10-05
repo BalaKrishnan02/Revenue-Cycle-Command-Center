@@ -647,17 +647,6 @@ export const getPayments = () =>
         { paymentId: 'PAY-3003', claimId: 'CLM3003', insuranceCompanyId: 'INS003', insuranceCompanyName: 'MediSecure Benefits', payerName: 'MediSecure', claimAmount: 90000, paidAmount: 20000, paymentStatus: 'PAID', transactionReference: 'TXN-3003-PARTIAL', paymentDate: new Date(Date.now() - 2 * 86400000).toISOString() }
       ];
 
-      // If user is insurance company, filter payments in demo mode
-      try {
-        const raw = localStorage.getItem('rcm_user');
-        if (raw) {
-          const user = JSON.parse(raw);
-          if (user.role === 'INSURANCE_COMPANY' && user.companyId) {
-            return allPayments.filter((p) => p.insuranceCompanyId === user.companyId);
-          }
-        }
-      } catch (e) {}
-
       return allPayments;
     }
   );

@@ -26,12 +26,6 @@ public class DashboardService {
     private final BillingPriorityService billingPriorityService;
 
     private List<Claim> getScopedClaims() {
-        UserPrincipal user = SecurityUtils.getCurrentUser();
-        if (user != null && "INSURANCE_COMPANY".equalsIgnoreCase(user.getRole())) {
-            String companyId = user.getCompanyId();
-            log.info("Scoped dashboard metrics: filtering claims exclusively for companyId={}", companyId);
-            return claimRepository.findByInsuranceCompanyIdOrderByCreatedAtDesc(companyId);
-        }
         return claimRepository.findAll();
     }
 

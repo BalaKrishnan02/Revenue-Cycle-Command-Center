@@ -42,31 +42,13 @@ public class ClaimService {
     private final LifecycleEmailService lifecycleEmailService;
 
     public List<Claim> getAllClaims() {
-        UserPrincipal user = SecurityUtils.getCurrentUser();
-        if (user != null && "INSURANCE_COMPANY".equalsIgnoreCase(user.getRole())) {
-            String companyId = user.getCompanyId();
-            log.info("Enforcing backend data isolation: fetching claims exclusively for companyId={}", companyId);
-            return claimRepository.findByInsuranceCompanyIdOrderByCreatedAtDesc(companyId);
-        }
         return claimRepository.findAllByOrderByCreatedAtDesc();
     }
 
     public Claim getClaimById(String idOrClaimId) {
-        Claim claim = claimRepository.findFirstByClaimId(idOrClaimId)
+        return claimRepository.findFirstByClaimId(idOrClaimId)
                 .or(() -> claimRepository.findById(idOrClaimId))
                 .orElseThrow(() -> new ResourceNotFoundException("Claim not found with id or claimId: " + idOrClaimId));
-
-        UserPrincipal user = SecurityUtils.getCurrentUser();
-        if (user != null && "INSURANCE_COMPANY".equalsIgnoreCase(user.getRole())) {
-            String companyId = user.getCompanyId();
-            if (claim.getInsuranceCompanyId() != null && !claim.getInsuranceCompanyId().equalsIgnoreCase(companyId)) {
-                log.warn("Security Alert: User {} belonging to {} attempted unauthorized access to claim {} belonging to company {}",
-                        user.getEmail(), companyId, claim.getClaimId(), claim.getInsuranceCompanyId());
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                        "Access Denied: You do not have permission to view claims belonging to another insurance company.");
-            }
-        }
-        return claim;
     }
 
     public List<ClaimHistory> getClaimHistory(String claimId) {
@@ -516,15 +498,6 @@ public class ClaimService {
     public Claim reviewClaimByInsurer(String idOrClaimId, ClaimReviewRequest request) {
         Claim claim = getClaimById(idOrClaimId);
         UserPrincipal user = SecurityUtils.getCurrentUser();
-
-        // Enforce insurer ownership
-        if (user != null && "INSURANCE_COMPANY".equalsIgnoreCase(user.getRole())) {
-            String companyId = user.getCompanyId();
-            if (claim.getInsuranceCompanyId() != null && !claim.getInsuranceCompanyId().equalsIgnoreCase(companyId)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                        "Access Denied: You cannot review claims belonging to another company.");
-            }
-        }
 
         String oldStatus = claim.getStatus();
         String newStatus = request.getStatus() != null ? request.getStatus().trim().toUpperCase() : oldStatus;

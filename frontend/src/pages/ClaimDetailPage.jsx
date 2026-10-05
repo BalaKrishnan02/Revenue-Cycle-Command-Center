@@ -419,189 +419,161 @@ export default function ClaimDetailPage() {
           </div>
         </div>
 
-        {/* Action Group: Tailored for Insurance Company vs RCM Admin */}
+        {/* Action Group: Accessible to All Users & All Companies */}
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          {isInsuranceCompany() ? (
-            /* Insurance Company Adjudicator Actions */
+          {/* 1. Edit & Correct Claim - Accessible to ALL Users & Companies */}
+          <button
+            onClick={() => setShowEditModal(true)}
+            disabled={actionLoading}
+            className="btn btn-secondary"
+            title="Edit and correct claim information (patient, payer, billing amounts, quality flags)"
+            style={{ fontWeight: '700' }}
+          >
+            <Edit3 size={15} />
+            <span>Edit & Correct Claim</span>
+          </button>
+
+          {/* 2. AI Denial Risk Check - Accessible to All Users */}
+          <button
+            onClick={handlePredict}
+            disabled={actionLoading}
+            className="btn btn-primary"
+            style={{ background: 'linear-gradient(135deg, #2563eb, #7c3aed)' }}
+            title="Evaluate denial probability with Random Forest Model"
+          >
+            <Sparkles size={15} />
+            <span>Check Denial Risk (AI)</span>
+          </button>
+
+          {/* 3. Review & Adjudicate Modal Trigger */}
+          <button
+            onClick={() => {
+              setAdjudicateForm({
+                status: claim.status === 'DENIED' ? 'DENIED' : 'ACCEPTED',
+                allowedAmount: claim.allowedAmount || claim.totalBillAmount || claim.claimAmount,
+                denialReason: claim.denialReason || 'Prior Authorization Absent: Pre-auth required for surgical procedure code 99214',
+                customReason: '',
+                comments: ''
+              });
+              setShowAdjudicateModal(true);
+            }}
+            disabled={actionLoading}
+            className="btn btn-secondary btn-sm"
+            title="Review, simulate or adjudicate claim"
+          >
+            <Sliders size={14} />
+            <span>Review & Adjudicate</span>
+          </button>
+
+          {/* 4. Quick Approve / Deny */}
+          {claim.status !== 'ACCEPTED' && claim.status !== 'PAID' && (
+            <button
+              onClick={handleQuickApprove}
+              disabled={actionLoading}
+              className="btn btn-success btn-sm"
+              title="Quickly approve claim for reimbursement"
+            >
+              <CheckCircle2 size={14} />
+              <span>Approve</span>
+            </button>
+          )}
+
+          {claim.status !== 'DENIED' && (
+            <button
+              onClick={handleQuickDeny}
+              disabled={actionLoading}
+              className="btn btn-danger btn-sm"
+              title="Issue denial notice"
+            >
+              <XCircle size={14} />
+              <span>Deny</span>
+            </button>
+          )}
+
+          {/* 5. Submission / Resubmission Pipeline */}
+          {isDenied ? (
+            <button
+              onClick={handleResubmit}
+              disabled={actionLoading}
+              className="btn btn-warning"
+              title="Resubmit denied claim after correcting errors"
+            >
+              <RotateCcw size={15} />
+              <span>Resubmit Claim</span>
+            </button>
+          ) : (claim.status === 'PENDING' || claim.status === 'UNDER_REVIEW') ? (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                padding: '0.45rem 0.85rem',
+                borderRadius: '8px',
+                backgroundColor: '#fffbeb',
+                border: '1px solid #fde68a',
+                color: '#92400e',
+                fontSize: '0.82rem',
+                fontWeight: '700'
+              }}
+              title="Claim is actively undergoing adjudication with insurance payer"
+            >
+              <Clock size={15} />
+              <span>Adjudication Pending</span>
+            </span>
+          ) : (claim.status === 'SUBMITTED' || claim.status === 'RESUBMITTED') ? (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                padding: '0.45rem 0.85rem',
+                borderRadius: '8px',
+                backgroundColor: '#f0f9ff',
+                border: '1px solid #bae6fd',
+                color: '#0369a1',
+                fontSize: '0.82rem',
+                fontWeight: '700'
+              }}
+              title="Claim transmitted via EDI 837"
+            >
+              <Send size={15} />
+              <span>Submitted to Payer</span>
+            </span>
+          ) : (!isAccepted && !isPaid) ? (
+            <button
+              onClick={handleSubmit}
+              disabled={actionLoading}
+              className="btn btn-success"
+              title="Transmit electronic EDI 837 claim to payer"
+            >
+              <Send size={15} />
+              <span>Submit to Payer</span>
+            </button>
+          ) : null}
+
+          {/* 6. Payment Settlement: ALL companies & users can pay each bill! */}
+          {!isPaid && (
             <>
               <button
-                onClick={() => {
-                  setAdjudicateForm({
-                    status: claim.status === 'DENIED' ? 'DENIED' : 'ACCEPTED',
-                    allowedAmount: claim.allowedAmount || claim.totalBillAmount || claim.claimAmount,
-                    denialReason: claim.denialReason || 'Prior Authorization Absent: Pre-auth required for surgical procedure code 99214',
-                    customReason: '',
-                    comments: ''
-                  });
-                  setShowAdjudicateModal(true);
-                }}
-                disabled={actionLoading}
-                className="btn btn-primary"
-                style={{ background: 'linear-gradient(135deg, #059669, #047857)' }}
-              >
-                <Sliders size={15} />
-                <span>Review & Adjudicate</span>
-              </button>
-
-              {claim.status !== 'ACCEPTED' && claim.status !== 'PAID' && (
-                <button
-                  onClick={handleQuickApprove}
-                  disabled={actionLoading}
-                  className="btn btn-success"
-                >
-                  <CheckCircle2 size={15} />
-                  <span>Approve Claim</span>
-                </button>
-              )}
-
-              {claim.status !== 'DENIED' && (
-                <button
-                  onClick={handleQuickDeny}
-                  disabled={actionLoading}
-                  className="btn btn-danger"
-                >
-                  <XCircle size={15} />
-                  <span>Issue Denial</span>
-                </button>
-              )}
-
-              {!isPaid && (
-                <button
-                  onClick={handleProcessPayment}
-                  disabled={actionLoading}
-                  className="btn btn-secondary"
-                  style={{ borderColor: '#86efac', color: '#065f46', background: '#f0fdf4' }}
-                >
-                  <DollarSign size={15} />
-                  <span>Settle Full Balance</span>
-                </button>
-              )}
-            </>
-          ) : (
-            /* RCM Admin Hospital Billing Actions */
-            <>
-              <button
-                onClick={handlePredict}
-                disabled={actionLoading}
-                className="btn btn-primary"
-                style={{ background: 'linear-gradient(135deg, #2563eb, #7c3aed)' }}
-                title="Evaluate denial probability with Random Forest Model"
-              >
-                <Sparkles size={16} />
-                <span>Check Denial Risk (AI)</span>
-              </button>
-
-              <button
-                onClick={() => setShowEditModal(true)}
+                onClick={() => setShowPartialModal(true)}
                 disabled={actionLoading}
                 className="btn btn-secondary"
+                style={{ borderColor: '#93c5fd', color: '#1d4ed8' }}
+                title="Record partial payment towards bill balance"
               >
-                <Edit3 size={16} />
-                <span>Edit / Correct</span>
+                <Coins size={15} />
+                <span>Partial Payment</span>
               </button>
 
-              {!isPaid && (
-                <button
-                  onClick={() => setShowPartialModal(true)}
-                  disabled={actionLoading}
-                  className="btn btn-secondary"
-                  style={{ borderColor: '#93c5fd', color: '#1d4ed8' }}
-                >
-                  <Coins size={16} />
-                  <span>Partial Payment</span>
-                </button>
-              )}
-
-              {isDenied ? (
-                <button
-                  onClick={handleResubmit}
-                  disabled={actionLoading}
-                  className="btn btn-warning"
-                  title="Resubmit denied claim after correcting errors"
-                >
-                  <RotateCcw size={16} />
-                  <span>Resubmit Claim</span>
-                </button>
-              ) : (claim.status === 'PENDING' || claim.status === 'UNDER_REVIEW') ? (
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    padding: '0.45rem 0.85rem',
-                    borderRadius: '8px',
-                    backgroundColor: '#fffbeb',
-                    border: '1px solid #fde68a',
-                    color: '#92400e',
-                    fontSize: '0.82rem',
-                    fontWeight: '700'
-                  }}
-                  title="Claim is actively undergoing adjudication with insurance payer"
-                >
-                  <Clock size={15} />
-                  <span>Adjudication Pending</span>
-                </span>
-              ) : (claim.status === 'SUBMITTED' || claim.status === 'RESUBMITTED') ? (
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    padding: '0.45rem 0.85rem',
-                    borderRadius: '8px',
-                    backgroundColor: '#f0f9ff',
-                    border: '1px solid #bae6fd',
-                    color: '#0369a1',
-                    fontSize: '0.82rem',
-                    fontWeight: '700'
-                  }}
-                  title="Claim transmitted via EDI 837"
-                >
-                  <Send size={15} />
-                  <span>Submitted to Payer</span>
-                </span>
-              ) : (!isAccepted && !isPaid) ? (
-                <button
-                  onClick={handleSubmit}
-                  disabled={actionLoading}
-                  className="btn btn-success"
-                  title="Transmit electronic EDI 837 claim to payer"
-                >
-                  <Send size={16} />
-                  <span>Submit to Payer</span>
-                </button>
-              ) : null}
-
-              {!isPaid && (
-                <button
-                  onClick={handleProcessPayment}
-                  disabled={actionLoading}
-                  className="btn btn-success"
-                  style={{ background: '#059669', boxShadow: '0 4px 14px rgba(5, 150, 105, 0.4)' }}
-                >
-                  <DollarSign size={16} />
-                  <span>Settle Full Balance</span>
-                </button>
-              )}
-
-              {/* Admin Adjudication Override Button */}
               <button
-                onClick={() => {
-                  setAdjudicateForm({
-                    status: claim.status === 'DENIED' ? 'DENIED' : 'ACCEPTED',
-                    allowedAmount: claim.allowedAmount || claim.totalBillAmount || claim.claimAmount,
-                    denialReason: claim.denialReason || 'Prior Authorization Absent: Pre-auth required for surgical procedure code 99214',
-                    customReason: '',
-                    comments: ''
-                  });
-                  setShowAdjudicateModal(true);
-                }}
+                onClick={handleProcessPayment}
                 disabled={actionLoading}
-                className="btn btn-secondary btn-sm"
-                title="Simulate or override payer adjudication"
+                className="btn btn-success"
+                style={{ background: '#059669', boxShadow: '0 4px 14px rgba(5, 150, 105, 0.4)' }}
+                title="Pay and settle full balance on this bill"
               >
-                <Sliders size={14} />
-                <span>Payer Adjudication</span>
+                <DollarSign size={15} />
+                <span>Settle Full Balance</span>
               </button>
             </>
           )}
@@ -631,15 +603,14 @@ export default function ClaimDetailPage() {
               <strong>Denial Reason:</strong> {claim.denialReason || 'General Policy Ineligibility'}
             </p>
           </div>
-          {isRcmAdmin() && (
-            <button
-              onClick={() => setShowEditModal(true)}
-              className="btn btn-danger"
-            >
-              <RotateCcw size={16} />
-              <span>Correct & Resubmit</span>
-            </button>
-          )}
+          <button
+            onClick={() => setShowEditModal(true)}
+            className="btn btn-danger"
+            title="Edit and correct this claim to resubmit"
+          >
+            <RotateCcw size={16} />
+            <span>Correct & Resubmit</span>
+          </button>
         </div>
       )}
 
@@ -760,14 +731,13 @@ export default function ClaimDetailPage() {
                 <ShieldCheck size={18} color="#2563eb" />
                 Pre-Submission Quality Flags
               </h3>
-              {isRcmAdmin() && (
-                <button
-                  onClick={() => setShowEditModal(true)}
-                  className="btn btn-secondary btn-sm"
-                >
-                  <Sliders size={12} /> Toggle
-                </button>
-              )}
+              <button
+                onClick={() => setShowEditModal(true)}
+                className="btn btn-secondary btn-sm"
+                title="Edit / toggle pre-submission quality checks"
+              >
+                <Sliders size={12} /> Toggle / Edit
+              </button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
