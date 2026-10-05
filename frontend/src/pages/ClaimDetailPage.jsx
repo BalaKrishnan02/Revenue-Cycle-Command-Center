@@ -133,18 +133,56 @@ export default function ClaimDetailPage() {
     setTimeout(() => setMessage(null), 5000);
   };
 
+  const resolveStageIndex = (status) => {
+    if (!status) return 1;
+    const s = status.toUpperCase();
+    if (s === 'PAID' || s === 'PARTIALLY_PAID') return 5;
+    if (['ACCEPTED', 'DENIED', 'PENDING', 'UNDER_REVIEW'].includes(s)) return 4;
+    if (['SUBMITTED', 'RESUBMITTED'].includes(s)) return 3;
+    if (['AI_CHECKED', 'HIGH_RISK', 'READY_TO_SUBMIT', 'CORRECTED'].includes(s)) return 2;
+    return 1;
+  };
+
+  const currentStageIndex = resolveStageIndex(claim?.status);
+  const currentStageAlreadySent = emails.some((e) => Number(e.stageIndex) === currentStageIndex);
+
+  // Strictly deduplicate stage emails so each stage appears at most once
+  const displayEmails = (() => {
+    const unique = [];
+    const seen = new Set();
+    for (const em of emails) {
+      const s = Number(em.stageIndex);
+      if (!seen.has(s)) {
+        seen.add(s);
+        unique.push(em);
+      }
+    }
+    return unique;
+  })();
+
   const handleSendStageEmail = async (targetEmail = null) => {
+    const claimIdentifier = claim?.claimId || claim?.id || id;
+    const to = targetEmail || claim?.patientEmail || 'balakrishnan206k@gmail.com';
+
+    // Strictly enforce each stage only one time: do not repeat
+    const alreadySentNotif = emails.find((e) => Number(e.stageIndex) === currentStageIndex);
+    if (alreadySentNotif) {
+      showNotification(`Stage ${currentStageIndex} progress email was already sent previously to ${alreadySentNotif.patientEmail}. Each stage can only be sent once.`, 'warning');
+      setShowCustomEmailModal(false);
+      return;
+    }
+
     try {
       setSendingEmail(true);
-      const to = targetEmail || claim.patientEmail || 'balakrishnan206k@gmail.com';
-      await sendClaimStageEmail(claim.claimId, to);
-      showNotification(`Process Lifecycle Stage progress email successfully sent to ${to}!`);
-      const eRes = await getClaimEmails(claim.claimId);
+      await sendClaimStageEmail(claimIdentifier, to);
+      showNotification(`Stage ${currentStageIndex} progress email successfully dispatched to ${to}!`);
+      const eRes = await getClaimEmails(claimIdentifier);
       setEmails(eRes.data || []);
       setShowCustomEmailModal(false);
     } catch (err) {
-      console.error(err);
-      showNotification('Failed to dispatch lifecycle stage email', 'danger');
+      console.error('Failed to dispatch lifecycle stage email:', err);
+      const msg = err?.response?.data?.message || err?.message || 'Failed to dispatch lifecycle stage email';
+      showNotification(`Failed to dispatch lifecycle stage email: ${msg}`, 'danger');
     } finally {
       setSendingEmail(false);
     }
@@ -476,15 +514,55 @@ export default function ClaimDetailPage() {
                   onClick={handleResubmit}
                   disabled={actionLoading}
                   className="btn btn-warning"
+                  title="Resubmit denied claim after correcting errors"
                 >
                   <RotateCcw size={16} />
                   <span>Resubmit Claim</span>
                 </button>
-              ) : !isAccepted && !isPaid ? (
+              ) : (claim.status === 'PENDING' || claim.status === 'UNDER_REVIEW') ? (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.45rem 0.85rem',
+                    borderRadius: '8px',
+                    backgroundColor: '#fffbeb',
+                    border: '1px solid #fde68a',
+                    color: '#92400e',
+                    fontSize: '0.82rem',
+                    fontWeight: '700'
+                  }}
+                  title="Claim is actively undergoing adjudication with insurance payer"
+                >
+                  <Clock size={15} />
+                  <span>Adjudication Pending</span>
+                </span>
+              ) : (claim.status === 'SUBMITTED' || claim.status === 'RESUBMITTED') ? (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.45rem 0.85rem',
+                    borderRadius: '8px',
+                    backgroundColor: '#f0f9ff',
+                    border: '1px solid #bae6fd',
+                    color: '#0369a1',
+                    fontSize: '0.82rem',
+                    fontWeight: '700'
+                  }}
+                  title="Claim transmitted via EDI 837"
+                >
+                  <Send size={15} />
+                  <span>Submitted to Payer</span>
+                </span>
+              ) : (!isAccepted && !isPaid) ? (
                 <button
                   onClick={handleSubmit}
                   disabled={actionLoading}
                   className="btn btn-success"
+                  title="Transmit electronic EDI 837 claim to payer"
                 >
                   <Send size={16} />
                   <span>Submit to Payer</span>
@@ -849,31 +927,54 @@ export default function ClaimDetailPage() {
                   )}
                 </span>
 
-                <button
-                  type="button"
-                  onClick={() => handleSendStageEmail()}
-                  disabled={sendingEmail}
-                  className="btn btn-primary btn-sm"
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem' }}
-                >
-                  <Send size={13} />
-                  <span>{sendingEmail ? 'Sending...' : 'Send Stage Email Now'}</span>
-                </button>
+                {currentStageAlreadySent ? (
+                  <span
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      fontSize: '0.78rem',
+                      fontWeight: '700',
+                      padding: '0.35rem 0.75rem',
+                      borderRadius: '6px',
+                      background: '#ecfdf5',
+                      color: '#065f46',
+                      border: '1px solid #a7f3d0'
+                    }}
+                    title={`Stage ${currentStageIndex} progress email already dispatched. Strictly sent only 1 time per stage.`}
+                  >
+                    <CheckCircle2 size={14} color="#059669" />
+                    Stage {currentStageIndex} Email Dispatched (1 Time Only)
+                  </span>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleSendStageEmail()}
+                      disabled={sendingEmail}
+                      className="btn btn-primary btn-sm"
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8rem' }}
+                    >
+                      <Send size={13} />
+                      <span>{sendingEmail ? 'Sending...' : 'Send Stage Email Now'}</span>
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={() => setShowCustomEmailModal(true)}
-                  className="btn btn-secondary btn-sm"
-                  style={{ fontSize: '0.8rem' }}
-                  title="Send to another email address"
-                >
-                  Send to Other...
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowCustomEmailModal(true)}
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: '0.8rem' }}
+                      title="Send to another email address"
+                    >
+                      Send to Other...
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
-            {/* Email Dispatch History Log */}
-            {emails.length === 0 ? (
+            {/* Email Dispatch History Log (Deduplicated: strictly 1 time per stage) */}
+            {displayEmails.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '1.5rem', color: '#64748b', background: '#ffffff', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
                 <Mail size={28} color="#94a3b8" style={{ marginBottom: '0.5rem' }} />
                 <div style={{ fontWeight: '600', fontSize: '0.9rem', color: '#334155' }}>No email dispatches recorded yet</div>
@@ -883,7 +984,7 @@ export default function ClaimDetailPage() {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {emails.map((em, idx) => (
+                {displayEmails.map((em, idx) => (
                   <div
                     key={em.id || idx}
                     style={{
@@ -1464,9 +1565,9 @@ export default function ClaimDetailPage() {
                 type="button"
                 onClick={() => handleSendStageEmail(customEmailTarget)}
                 className="btn btn-primary"
-                disabled={sendingEmail || !customEmailTarget}
+                disabled={sendingEmail || !customEmailTarget || currentStageAlreadySent}
               >
-                {sendingEmail ? 'Sending...' : 'Send Notification'}
+                {sendingEmail ? 'Sending...' : currentStageAlreadySent ? `Stage ${currentStageIndex} Already Dispatched` : 'Send Notification'}
               </button>
             </div>
           </div>

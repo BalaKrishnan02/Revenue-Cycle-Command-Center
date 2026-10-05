@@ -16,8 +16,12 @@ import java.text.NumberFormat;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -46,6 +50,7 @@ public class LifecycleEmailService {
 
     /**
      * Dispatches automated email notification for a specific claim lifecycle stage.
+     * Strictly sent only one time per stage per claim. It will not repeat.
      */
     public ClaimEmailNotification sendStageProgressEmail(Claim claim, int stageIndex, String stageName, String stageDescription) {
         if (!mailEnabled) {
@@ -57,17 +62,13 @@ public class LifecycleEmailService {
                 ? claim.getPatientEmail().trim()
                 : defaultRecipient;
 
-        // Check if an email for this claim at this stage and status was already sent (strictly one email per stage)
+        // Strictly ensure only one email per lifecycle stage (Stage 1 to 5) per claim. Never repeat.
         if (claim.getClaimId() != null) {
             List<ClaimEmailNotification> existing = emailRepository.findByClaimIdOrderBySentAtDesc(claim.getClaimId());
-            boolean alreadySent = existing.stream().anyMatch(e ->
-                    e.getStageIndex() == stageIndex &&
-                    e.getClaimStatus() != null &&
-                    e.getClaimStatus().equalsIgnoreCase(claim.getStatus())
-            );
+            boolean alreadySent = existing.stream().anyMatch(e -> e.getStageIndex() == stageIndex);
             if (alreadySent) {
-                log.info("Email for claim {} at stage {} ({}) already sent. Skipping duplicate.",
-                        claim.getClaimId(), stageIndex, claim.getStatus());
+                log.info("Stage {} email for claim {} already dispatched previously. Each stage can only be sent once.",
+                        stageIndex, claim.getClaimId());
                 return existing.stream().filter(e -> e.getStageIndex() == stageIndex).findFirst().orElse(null);
             }
         }
@@ -163,7 +164,24 @@ public class LifecycleEmailService {
     }
 
     public List<ClaimEmailNotification> getEmailsForClaim(String claimId) {
-        return emailRepository.findByClaimIdOrderBySentAtDesc(claimId);
+        List<ClaimEmailNotification> raw = emailRepository.findByClaimIdOrderBySentAtDesc(claimId);
+        Map<Integer, ClaimEmailNotification> uniqueByStage = new LinkedHashMap<>();
+        List<ClaimEmailNotification> duplicatesToDelete = new ArrayList<>();
+
+        for (ClaimEmailNotification notif : raw) {
+            if (uniqueByStage.containsKey(notif.getStageIndex())) {
+                duplicatesToDelete.add(notif);
+            } else {
+                uniqueByStage.put(notif.getStageIndex(), notif);
+            }
+        }
+
+        if (!duplicatesToDelete.isEmpty()) {
+            emailRepository.deleteAll(duplicatesToDelete);
+            log.info("Pruned {} historical duplicate email notification records for claim {}", duplicatesToDelete.size(), claimId);
+        }
+
+        return new ArrayList<>(uniqueByStage.values());
     }
 
     public ClaimEmailNotification triggerManualStageEmail(Claim claim, String customRecipient) {
@@ -172,8 +190,22 @@ public class LifecycleEmailService {
         }
 
         int stageIndex = resolveStageIndex(claim.getStatus());
+
+        // Strictly check if an email for this stage was already dispatched
+        if (claim.getClaimId() != null) {
+            List<ClaimEmailNotification> existing = emailRepository.findByClaimIdOrderBySentAtDesc(claim.getClaimId());
+            Optional<ClaimEmailNotification> alreadySent = existing.stream()
+                    .filter(e -> e.getStageIndex() == stageIndex)
+                    .findFirst();
+            if (alreadySent.isPresent()) {
+                log.info("Stage {} email for claim {} was already dispatched previously. Each stage can only be sent once.",
+                        stageIndex, claim.getClaimId());
+                return alreadySent.get();
+            }
+        }
+
         String stageName = resolveStageName(stageIndex, claim.getStatus());
-        String stageDesc = "Manual lifecycle progress dispatch requested for " + claim.getClaimId() + " (Status: " + claim.getStatus() + ").";
+        String stageDesc = "Lifecycle progress notification dispatched for " + claim.getClaimId() + " (" + stageName + ").";
 
         return sendStageProgressEmail(claim, stageIndex, stageName, stageDesc);
     }

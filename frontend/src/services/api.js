@@ -26,7 +26,7 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('rcm_auth_token');
-    if (token) {
+    if (token && !token.startsWith('demo-jwt-token-')) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
@@ -39,6 +39,11 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      const token = localStorage.getItem('rcm_auth_token');
+      // If currently using a demo token, do not redirect out of demo session
+      if (token?.startsWith('demo-jwt-token-')) {
+        return Promise.reject(error);
+      }
       // Clear token if expired or invalid
       const currentPath = window.location.pathname;
       if (currentPath !== '/login' && currentPath !== '/register') {
@@ -51,13 +56,15 @@ api.interceptors.response.use(
   }
 );
 
-// Safe request wrapper that falls back to demo data on network failure (e.g. on mobile when backend is offline)
+// Safe request wrapper that falls back to demo data on network failure or demo session
 const safeRequest = async (networkFn, fallbackFn) => {
   try {
     return await networkFn();
   } catch (err) {
-    if (!err.response || err.code === 'ECONNABORTED' || err.message?.includes('Network Error')) {
-      console.warn('API backend unreachable. Using local storage demo fallback for seamless experience:', err.message);
+    const isNetworkErr = !err.response || err.code === 'ECONNABORTED' || err.message?.includes('Network Error');
+    const isDemoToken = localStorage.getItem('rcm_auth_token')?.startsWith('demo-jwt-token-');
+    if (isNetworkErr || (isDemoToken && (err.response?.status === 401 || err.response?.status === 403))) {
+      console.warn('API backend unreachable or active demo session. Using local storage demo fallback for seamless experience:', err.message);
       return { data: fallbackFn() };
     }
     throw err;
@@ -261,20 +268,16 @@ export const predictClaimRisk = async (id) => {
       const claim = claims.find((c) => c.claimId === id || c.id === id) || claims[0];
       claim.riskScore = 22;
       claim.riskLevel = 'LOW';
-      claim.status = 'READY_TO_SUBMIT';
-      claim.predictedReason = 'Clean Claim Quality Metrics';
-      claim.recommendation = 'Claim passes pre-submission checks. Ready for immediate payer submission.';
-      claim.detectedReasons = ['Clean Claim Quality Metrics'];
-      claim.recommendations = ['Claim passes pre-submission checks. Ready for immediate payer submission.'];
-      saveStoredClaims(claims);
-
-      // Auto-dispatch Stage 2 Email
-      recordDemoStageEmail(
-        claim,
-        2,
-        'Stage 2: AI Pre-Audit Risk Analysis Complete',
-        `AI pre-submission audit completed with estimated denial risk of 22% (LOW Risk). Recommendation: Ready for immediate payer submission.`
-      );
+      const isPreSubmission = !claim.status || ['CREATED', 'AI_CHECKED', 'HIGH_RISK', 'READY_TO_SUBMIT', 'CORRECTED'].includes(claim.status);
+      if (isPreSubmission) {
+        claim.status = 'READY_TO_SUBMIT';
+        recordDemoStageEmail(
+          claim,
+          2,
+          'Stage 2: AI Pre-Audit Risk Analysis Complete',
+          `AI pre-submission audit completed with estimated denial risk of 22% (LOW Risk). Recommendation: Ready for immediate payer submission.`
+        );
+      }
 
       return { data: claim };
     }
@@ -485,8 +488,29 @@ export const recordFollowUp = (id, notes = '') => api.post(`/claims/${id}/follow
 // Lifecycle Email Notifications & Step-by-Step Dispatch
 export const getStoredClaimEmails = (claimId) => {
   try {
-    const raw = localStorage.getItem(`rcm_emails_${claimId}`);
-    return raw ? JSON.parse(raw) : [];
+    let raw = localStorage.getItem(`rcm_emails_${claimId}`);
+    if (!raw) {
+      const claims = getStoredClaims();
+      const matched = claims.find((c) => c.claimId === claimId || c.id === claimId);
+      if (matched) {
+        const altId = matched.claimId === claimId ? matched.id : matched.claimId;
+        if (altId) {
+          raw = localStorage.getItem(`rcm_emails_${altId}`);
+        }
+      }
+    }
+    const list = raw ? JSON.parse(raw) : [];
+    // Strictly deduplicate by stageIndex: each stage only one time
+    const unique = [];
+    const seenStages = new Set();
+    for (const item of list) {
+      const s = Number(item.stageIndex);
+      if (!seenStages.has(s)) {
+        seenStages.add(s);
+        unique.push(item);
+      }
+    }
+    return unique;
   } catch {
     return [];
   }
@@ -498,9 +522,9 @@ export const recordDemoStageEmail = (claim, stageIndex, stageName, stageDesc, ta
     const recipient = targetEmail || claim.patientEmail || 'balakrishnan206k@gmail.com';
     const list = getStoredClaimEmails(cid);
 
-    // Strictly ensure only one email per stage index for this claim
-    const alreadySent = list.find((e) => e.stageIndex === stageIndex);
-    if (alreadySent && !targetEmail) {
+    // Strictly ensure only one email per stage index: never repeat
+    const alreadySent = list.find((e) => Number(e.stageIndex) === Number(stageIndex));
+    if (alreadySent) {
       return alreadySent;
     }
 
@@ -510,7 +534,7 @@ export const recordDemoStageEmail = (claim, stageIndex, stageName, stageDesc, ta
       patientEmail: recipient,
       patientName: claim.patientName || 'Valued Patient',
       patientReference: claim.patientReference || 'N/A',
-      stageIndex: stageIndex,
+      stageIndex: Number(stageIndex),
       stageName: stageName,
       claimStatus: claim.status || 'CREATED',
       billedAmount: claim.totalBillAmount || claim.claimAmount || 0,
@@ -523,6 +547,10 @@ export const recordDemoStageEmail = (claim, stageIndex, stageName, stageDesc, ta
     };
     list.unshift(notif);
     localStorage.setItem(`rcm_emails_${cid}`, JSON.stringify(list));
+    if (claim.id && claim.claimId && claim.id !== claim.claimId) {
+      localStorage.setItem(`rcm_emails_${claim.id}`, JSON.stringify(list));
+      localStorage.setItem(`rcm_emails_${claim.claimId}`, JSON.stringify(list));
+    }
     return notif;
   } catch {
     return null;

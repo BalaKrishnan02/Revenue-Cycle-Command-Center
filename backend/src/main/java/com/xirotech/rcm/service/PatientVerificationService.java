@@ -1,5 +1,6 @@
 package com.xirotech.rcm.service;
 
+import com.xirotech.rcm.model.PatientVerification;
 import com.xirotech.rcm.repository.PatientVerificationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

@@ -212,53 +212,70 @@ public class ClaimService {
         claim.setPredictedReason(!response.getReasons().isEmpty() ? response.getReasons().get(0) : "None");
         claim.setRecommendation(!response.getRecommendations().isEmpty() ? response.getRecommendations().get(0) : "Ready for submission.");
 
-        String newStatus;
-        if ("HIGH".equals(response.getRiskLevel())) {
-            newStatus = "HIGH_RISK";
-        } else if ("LOW".equals(response.getRiskLevel())) {
-            newStatus = "READY_TO_SUBMIT";
+        // Only advance pre-submission claims (Stage 1 & 2: CREATED, AI_CHECKED, HIGH_RISK, READY_TO_SUBMIT, CORRECTED)
+        boolean isPreSubmission = oldStatus == null || List.of("CREATED", "AI_CHECKED", "HIGH_RISK", "READY_TO_SUBMIT", "CORRECTED")
+                .contains(oldStatus.toUpperCase());
+
+        if (isPreSubmission) {
+            String newStatus;
+            if ("HIGH".equals(response.getRiskLevel())) {
+                newStatus = "HIGH_RISK";
+            } else if ("LOW".equals(response.getRiskLevel())) {
+                newStatus = "READY_TO_SUBMIT";
+            } else {
+                newStatus = "AI_CHECKED";
+            }
+
+            claim.setStatus(newStatus);
+            billingPriorityService.calculateBillingPriority(claim);
+            claim.setUpdatedAt(Instant.now());
+            Claim updated = claimRepository.save(claim);
+
+            logHistory(claim.getClaimId(), oldStatus, newStatus,
+                    "AI Risk Check completed: " + response.getRiskScore() + "% (" + response.getRiskLevel() + " Risk). Root cause: " + claim.getPredictedReason());
+
+            if ("HIGH".equals(response.getRiskLevel())) {
+                alertService.createAlert(
+                        claim.getClaimId(),
+                        "HIGH_RISK",
+                        "CRITICAL",
+                        "High Denial Risk: " + claim.getClaimId(),
+                        claim.getClaimId() + " has an estimated " + response.getRiskScore() + "% denial risk due to: " + claim.getPredictedReason()
+                );
+            } else if (!claim.isAuthorizationAvailable()) {
+                alertService.createAlert(
+                        claim.getClaimId(),
+                        "MISSING_AUTH",
+                        "WARNING",
+                        "Missing Authorization: " + claim.getClaimId(),
+                        "Authorization is missing for claim " + claim.getClaimId() + ". Please resolve prior to submission."
+                );
+            }
+
+            liveUpdateService.broadcastUpdate("CLAIM_PREDICTED", updated);
+
+            // Dispatch Stage 2: AI Pre-Audit Analysis Complete progress email to patient/user
+            lifecycleEmailService.sendStageProgressEmail(
+                    updated,
+                    2,
+                    "Stage 2: AI Pre-Audit Analysis Complete",
+                    "AI pre-submission audit completed with estimated denial risk of " + response.getRiskScore() +
+                            "% (" + response.getRiskLevel() + " Risk). Recommendation: " + updated.getRecommendation()
+            );
+
+            return updated;
         } else {
-            newStatus = "AI_CHECKED";
+            // Claim is already in submission, adjudication, or settlement. Do not regress stage backwards.
+            billingPriorityService.calculateBillingPriority(claim);
+            claim.setUpdatedAt(Instant.now());
+            Claim updated = claimRepository.save(claim);
+
+            logHistory(claim.getClaimId(), oldStatus, oldStatus,
+                    "AI Risk Audit refreshed: " + response.getRiskScore() + "% (" + response.getRiskLevel() + " Risk). Preserved lifecycle status: " + oldStatus);
+
+            liveUpdateService.broadcastUpdate("CLAIM_PREDICTED", updated);
+            return updated;
         }
-
-        claim.setStatus(newStatus);
-        billingPriorityService.calculateBillingPriority(claim);
-        claim.setUpdatedAt(Instant.now());
-        Claim updated = claimRepository.save(claim);
-
-        logHistory(claim.getClaimId(), oldStatus, newStatus,
-                "AI Risk Check completed: " + response.getRiskScore() + "% (" + response.getRiskLevel() + " Risk). Root cause: " + claim.getPredictedReason());
-
-        if ("HIGH".equals(response.getRiskLevel())) {
-            alertService.createAlert(
-                    claim.getClaimId(),
-                    "HIGH_RISK",
-                    "CRITICAL",
-                    "High Denial Risk: " + claim.getClaimId(),
-                    claim.getClaimId() + " has an estimated " + response.getRiskScore() + "% denial risk due to: " + claim.getPredictedReason()
-            );
-        } else if (!claim.isAuthorizationAvailable()) {
-            alertService.createAlert(
-                    claim.getClaimId(),
-                    "MISSING_AUTH",
-                    "WARNING",
-                    "Missing Authorization: " + claim.getClaimId(),
-                    "Authorization is missing for claim " + claim.getClaimId() + ". Please resolve prior to submission."
-            );
-        }
-
-        liveUpdateService.broadcastUpdate("CLAIM_PREDICTED", updated);
-
-        // Dispatch Stage 2: AI Pre-Audit Analysis Complete progress email to patient/user
-        lifecycleEmailService.sendStageProgressEmail(
-                updated,
-                2,
-                "Stage 2: AI Pre-Audit Analysis Complete",
-                "AI pre-submission audit completed with estimated denial risk of " + response.getRiskScore() +
-                        "% (" + response.getRiskLevel() + " Risk). Recommendation: " + updated.getRecommendation()
-        );
-
-        return updated;
     }
 
     public Claim updateOrCorrectClaim(String idOrClaimId, ClaimRequest request) {
@@ -302,6 +319,14 @@ public class ClaimService {
     public Claim submitClaim(String idOrClaimId) {
         Claim claim = getClaimById(idOrClaimId);
         String oldStatus = claim.getStatus();
+
+        if ("SUBMITTED".equalsIgnoreCase(oldStatus) || "RESUBMITTED".equalsIgnoreCase(oldStatus)
+                || "PENDING".equalsIgnoreCase(oldStatus) || "UNDER_REVIEW".equalsIgnoreCase(oldStatus)
+                || "ACCEPTED".equalsIgnoreCase(oldStatus) || "PAID".equalsIgnoreCase(oldStatus)
+                || "PARTIALLY_PAID".equalsIgnoreCase(oldStatus)) {
+            log.warn("Claim {} is already in status {}. Duplicate submission blocked.", claim.getClaimId(), oldStatus);
+            return claim;
+        }
 
         claim.setStatus("SUBMITTED");
         if (claim.getClaimSubmittedDate() == null) {
@@ -354,6 +379,11 @@ public class ClaimService {
     public Claim resubmitClaim(String idOrClaimId) {
         Claim claim = getClaimById(idOrClaimId);
         String oldStatus = claim.getStatus();
+
+        if ("PAID".equalsIgnoreCase(oldStatus) || "ACCEPTED".equalsIgnoreCase(oldStatus) || "RESUBMITTED".equalsIgnoreCase(oldStatus)) {
+            log.warn("Claim {} is already in status {}. Resubmission blocked.", claim.getClaimId(), oldStatus);
+            return claim;
+        }
 
         claim.setStatus("RESUBMITTED");
         claim.setUpdatedAt(Instant.now());
@@ -567,6 +597,17 @@ public class ClaimService {
     }
 
     private void logHistory(String claimId, String oldStatus, String newStatus, String description) {
+        List<ClaimHistory> existing = claimHistoryRepository.findByClaimIdOrderByTimestampAsc(claimId);
+        if (!existing.isEmpty()) {
+            ClaimHistory last = existing.get(existing.size() - 1);
+            if (java.util.Objects.equals(last.getNewStatus(), newStatus) &&
+                java.util.Objects.equals(last.getOldStatus(), oldStatus) &&
+                java.util.Objects.equals(last.getDescription(), description)) {
+                log.info("Duplicate history entry for claim {} skipped: {}", claimId, newStatus);
+                return;
+            }
+        }
+
         ClaimHistory history = ClaimHistory.builder()
                 .claimId(claimId)
                 .oldStatus(oldStatus)

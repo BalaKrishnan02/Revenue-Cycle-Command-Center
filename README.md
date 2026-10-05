@@ -100,7 +100,7 @@ cd backend
 
 # 2. Run with Maven Wrapper (No global Maven installation required!):
 # On Windows PowerShell:
-.\mvnw.ps1 spring-boot:run
+
 
 # On Windows Command Prompt (CMD):
 mvnw.cmd spring-boot:run
