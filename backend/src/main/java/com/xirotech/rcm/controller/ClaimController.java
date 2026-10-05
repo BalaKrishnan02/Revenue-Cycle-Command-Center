@@ -139,5 +139,10 @@ public class ClaimController {
         String recipient = (body != null && body.containsKey("email")) ? body.get("email") : null;
         return ResponseEntity.ok(lifecycleEmailService.triggerManualStageEmail(claim, recipient));
     }
+
+    @PostMapping("/api/claims/scan-card")
+    public ResponseEntity<Map<String, Object>> scanInsuranceCard(@RequestBody(required = false) Map<String, Object> body) {
+        return ResponseEntity.ok(claimService.scanInsuranceCard(body));
+    }
 }
 

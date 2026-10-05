@@ -57,14 +57,14 @@ public class ArAgingService {
         int days = claim.getDaysPending();
         if (days <= 0 && claim.getClaimSubmittedDate() != null) {
             long d = Duration.between(claim.getClaimSubmittedDate(), Instant.now()).toDays();
-            days = (int) Math.max(1, d);
+            days = (int) Math.max(0, d);
             claim.setDaysPending(days);
         } else if (days <= 0 && claim.getCreatedAt() != null) {
             long d = Duration.between(claim.getCreatedAt(), Instant.now()).toDays();
-            days = (int) Math.max(1, d);
+            days = (int) Math.max(0, d);
             claim.setDaysPending(days);
         } else if (days <= 0) {
-            days = 1;
+            days = 0;
             claim.setDaysPending(days);
         }
 
@@ -107,9 +107,27 @@ public class ArAgingService {
     public String getClaimDateString(Claim c) {
         Instant date = c.getClaimSubmittedDate() != null ? c.getClaimSubmittedDate() : c.getCreatedAt();
         if (date != null) {
-            return java.time.format.DateTimeFormatter.ISO_LOCAL_DATE.withZone(java.time.ZoneOffset.UTC).format(date);
+            return java.time.format.DateTimeFormatter.ISO_LOCAL_DATE.withZone(java.time.ZoneId.systemDefault()).format(date);
         }
-        return java.time.LocalDate.now().minusDays(Math.max(1, c.getDaysPending())).toString();
+        return java.time.LocalDate.now().minusDays(Math.max(0, c.getDaysPending())).toString();
+    }
+
+    public boolean matchesDate(Claim c, String date) {
+        if (date == null || date.isBlank() || date.equalsIgnoreCase("ALL")) {
+            return true;
+        }
+        String target = date.trim();
+        if (getClaimDateString(c).equals(target)) {
+            return true;
+        }
+        Instant inst = c.getClaimSubmittedDate() != null ? c.getClaimSubmittedDate() : c.getCreatedAt();
+        if (inst != null) {
+            String utcStr = java.time.format.DateTimeFormatter.ISO_LOCAL_DATE.withZone(java.time.ZoneOffset.UTC).format(inst);
+            if (utcStr.equals(target)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -129,8 +147,7 @@ public class ArAgingService {
         List<Claim> activeClaims = allClaims.stream()
                 .filter(c -> !"PAID/CLOSED".equalsIgnoreCase(c.getAgingBucket()) && c.getPendingAmount() > 0.001)
                 .filter(c -> matchesCompany(c, user, payer))
-                .filter(c -> date == null || date.isBlank() || date.equalsIgnoreCase("ALL") || 
-                        getClaimDateString(c).equals(date.trim()))
+                .filter(c -> matchesDate(c, date))
                 .toList();
 
         double totalOutstanding = activeClaims.stream()
@@ -204,8 +221,7 @@ public class ArAgingService {
                 .filter(c -> !"PAID/CLOSED".equalsIgnoreCase(c.getAgingBucket()) && c.getPendingAmount() > 0.001)
                 .filter(c -> bucket == null || bucket.isBlank() || bucket.equalsIgnoreCase("ALL") || bucket.equalsIgnoreCase(c.getAgingBucket()))
                 .filter(c -> matchesCompany(c, user, payer))
-                .filter(c -> date == null || date.isBlank() || date.equalsIgnoreCase("ALL") || 
-                        getClaimDateString(c).equals(date.trim()))
+                .filter(c -> matchesDate(c, date))
                 .sorted(Comparator.comparingInt(Claim::getDaysPending).reversed()
                         .thenComparing(Comparator.comparingDouble(Claim::getPendingAmount).reversed()))
                 .collect(Collectors.toList());

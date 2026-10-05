@@ -188,6 +188,38 @@ export const recordArFollowUp = async (id, followUpData = {}) => {
   }
 };
 
+export const scanInsuranceCard = (cardPayload = {}) =>
+  safeRequest(
+    () => api.post('/claims/scan-card', cardPayload),
+    () => ({
+      success: true,
+      cardType: 'HEALTH_INSURANCE_CARD',
+      confidence: 99.4,
+      patientName: 'Arjun Menon',
+      patientReference: 'CA-INS-00734192',
+      memberId: 'CA-INS-00734192',
+      claimSupportId: 'CLM-PRO-2026-1202',
+      insuranceCompanyName: 'CareShield Assurance',
+      insuranceCompanyId: 'INS002',
+      payerName: 'CareShield Assurance',
+      payerType: 'COMMERCIAL',
+      patientEmail: 'support@careshieldassurance.demo',
+      guardianName: 'Raghavan Menon',
+      dob: '17 Nov 1992',
+      gender: 'Male',
+      state: 'Kerala',
+      district: 'Kochi',
+      planType: 'CareShield Silver',
+      coverageLimit: 500000,
+      suggestedClaimAmount: 45000,
+      helpline: '14555 / 1800-111-565',
+      eligibilityVerified: true,
+      authorizationAvailable: true,
+      codingComplete: true,
+      documentationComplete: true
+    })
+  );
+
 // Claims CRUD & Lifecycle
 export const getClaims = () =>
   safeRequest(

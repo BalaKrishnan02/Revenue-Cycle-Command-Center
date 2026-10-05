@@ -550,6 +550,79 @@ export default function ArAgingPage() {
           </div>
         </div>
 
+        {/* Quick Date Chips from Daily Stats */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          flexWrap: 'wrap',
+          marginTop: '0.85rem',
+          paddingTop: '0.85rem',
+          borderTop: '1px solid var(--border-color)'
+        }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#64748b' }}>
+            Available Claim Dates:
+          </span>
+
+          <button
+            type="button"
+            onClick={() => handleDateSelect('ALL')}
+            style={{
+              padding: '0.25rem 0.65rem',
+              borderRadius: '9999px',
+              fontSize: '0.75rem',
+              fontWeight: '700',
+              cursor: 'pointer',
+              border: selectedDate === 'ALL' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+              background: selectedDate === 'ALL' ? '#eff6ff' : '#f8fafc',
+              color: selectedDate === 'ALL' ? '#1d4ed8' : '#475569',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            All Dates ({dailyStats.reduce((sum, ds) => sum + (ds.claimCount || 0), 0) || claims.length} claims)
+          </button>
+
+          {dailyStats.map((ds) => {
+            const isSelected = selectedDate === ds.date;
+            const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD local
+            const isToday = ds.date === todayStr;
+            return (
+              <button
+                key={ds.date}
+                type="button"
+                onClick={() => handleDateSelect(ds.date)}
+                style={{
+                  padding: '0.25rem 0.65rem',
+                  borderRadius: '9999px',
+                  fontSize: '0.75rem',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  border: isSelected ? '2px solid #2563eb' : (isToday ? '1px solid #60a5fa' : '1px solid #cbd5e1'),
+                  background: isSelected ? '#eff6ff' : (isToday ? '#f0f9ff' : '#ffffff'),
+                  color: isSelected ? '#1d4ed8' : (isToday ? '#0284c7' : '#334155'),
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  boxShadow: isSelected ? '0 1px 3px rgba(37,99,235,0.2)' : 'none',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span>{isToday ? `Today (${ds.formattedDate})` : ds.formattedDate}</span>
+                <span style={{
+                  fontSize: '0.65rem',
+                  padding: '0.05rem 0.35rem',
+                  borderRadius: '9999px',
+                  background: isSelected ? '#2563eb' : (isToday ? '#38bdf8' : '#e2e8f0'),
+                  color: isSelected || isToday ? '#ffffff' : '#475569',
+                  fontWeight: '800'
+                }}>
+                  {ds.claimCount}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* Selected Day Amount Inspection Banner & Claimed Person Data */}
         {selectedDate !== 'ALL' && (
           <div style={{
@@ -672,13 +745,47 @@ export default function ArAgingPage() {
               {filteredClaims.length === 0 ? (
                 <div style={{
                   background: 'rgba(255, 255, 255, 0.05)',
-                  padding: '1.5rem',
+                  padding: '2rem 1.5rem',
                   borderRadius: '8px',
                   textAlign: 'center',
-                  color: '#94a3b8',
-                  fontSize: '0.85rem'
+                  color: '#cbd5e1',
+                  border: '1px dashed rgba(255, 255, 255, 0.2)'
                 }}>
-                  No patient claims recorded on this specific date.
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                    <Calendar size={28} color="#94a3b8" />
+                    <div style={{ fontWeight: '700', fontSize: '0.95rem', color: '#ffffff' }}>
+                      No Patient Claims Recorded on {formatDisplayDate(selectedDate)}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', maxWidth: '440px' }}>
+                      There are no active or pending insurance claims filed on this specific calendar date.
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                      {dailyStats.length > 0 && dailyStats[0].date !== selectedDate && (
+                        <button
+                          type="button"
+                          onClick={() => handleDateSelect(dailyStats[0].date)}
+                          className="btn btn-primary btn-sm"
+                          style={{ fontSize: '0.75rem', padding: '0.35rem 0.75rem' }}
+                        >
+                          Jump to Latest: {dailyStats[0].formattedDate} ({dailyStats[0].claimCount} claims)
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleDateSelect('ALL')}
+                        className="btn btn-secondary btn-sm"
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.15)',
+                          border: '1px solid rgba(255, 255, 255, 0.25)',
+                          color: '#ffffff',
+                          fontSize: '0.75rem',
+                          padding: '0.35rem 0.75rem'
+                        }}
+                      >
+                        View All Dates
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div style={{

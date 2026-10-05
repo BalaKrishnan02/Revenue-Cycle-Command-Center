@@ -70,6 +70,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/patient-verification/**").permitAll()
                         .requestMatchers("/api/insurance-companies/public").permitAll()
+                        .requestMatchers("/api/claims/scan-card").permitAll()
                         .requestMatchers("/api/health").permitAll()
                         .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()

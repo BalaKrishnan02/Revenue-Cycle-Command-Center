@@ -44,6 +44,9 @@ public class DataSeeder implements CommandLineRunner {
         // 4. Ensure all 5 insurance companies have realistic DENIED claims
         ensureAllPayersHaveDeniedClaims();
 
+        // 5. Ensure AR Aging showcase and calendar claims exist for the current date
+        ensureArAgingCalendarClaims();
+
         // Seed AR Aging showcase claims if not present
         if (claimRepository.findFirstByClaimId("CLM6001").isEmpty()) {
             seedArAgingClaims();
@@ -180,6 +183,153 @@ public class DataSeeder implements CommandLineRunner {
         claimRepository.saveAll(arClaims);
         seedPayments(arClaims);
         log.info("Seeded 4 AR Aging claims: CLM6001, CLM6002, CLM6003, CLM6004.");
+    }
+
+    private void ensureArAgingCalendarClaims() {
+        log.info("Checking & ensuring active AR Aging claims for current calendar date...");
+        java.time.LocalDate today = java.time.LocalDate.now();
+        java.time.ZoneId zone = java.time.ZoneId.systemDefault();
+        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ISO_LOCAL_DATE.withZone(zone);
+
+        List<Claim> allClaims = claimRepository.findAll();
+        long todayCount = allClaims.stream()
+                .filter(c -> !"PAID/CLOSED".equalsIgnoreCase(c.getAgingBucket()) && c.getPendingAmount() > 0.001)
+                .filter(c -> {
+                    Instant inst = c.getClaimSubmittedDate() != null ? c.getClaimSubmittedDate() : c.getCreatedAt();
+                    return inst != null && fmt.format(inst).equals(today.toString());
+                })
+                .count();
+
+        log.info("Found {} active AR claims on today ({})", todayCount, today);
+
+        if (todayCount < 4) {
+            log.info("Seeding/updating claims for today: {}", today);
+            Instant now = Instant.now();
+
+            List<Claim> todayClaims = new ArrayList<>();
+
+            // 1. CLM6005 - Nova Health Insurance
+            todayClaims.add(buildCalendarClaim("CLM6005", "Kavita Ramachandran", "PT6001", "Nova Health Insurance", "PRIVATE",
+                    100000, 20000, 0, "SUBMITTED", "PARTIALLY_PAID", now,
+                    "Clean Claim Quality Metrics", "Routine inpatient surgery submitted today. On-time payment expected."));
+
+            // 2. CLM6006 - CareShield Assurance
+            todayClaims.add(buildCalendarClaim("CLM6006", "Rajesh Khanna", "PT6006", "CareShield Assurance", "COMMERCIAL",
+                    75000, 15000, 0, "SUBMITTED", "PARTIALLY_PAID", now,
+                    "Clean Claim Quality Metrics", "First-day claim intake. All pre-authorization documents attached."));
+
+            // 3. CLM6007 - HealthPrime Plan
+            todayClaims.add(buildCalendarClaim("CLM6007", "Sunita Narayanan", "PT6007", "HealthPrime Plan", "COMMERCIAL",
+                    50000, 0, 0, "PENDING", "UNPAID", now,
+                    "Clean Claim Quality Metrics", "Submitted this morning. Under adjudication with HealthPrime."));
+
+            // 4. CLM6008 - MediSecure Benefits
+            todayClaims.add(buildCalendarClaim("CLM6008", "Deepak Chopra", "PT6008", "MediSecure Benefits", "PRIVATE",
+                    85000, 25000, 0, "SUBMITTED", "PARTIALLY_PAID", now,
+                    "Clean Claim Quality Metrics", "Cardiology care remittance pending standard adjudication."));
+
+            // 5. CLM6009 - Unity Payer Network
+            todayClaims.add(buildCalendarClaim("CLM6009", "Meenakshi Sundaram", "PT6009", "Unity Payer Network", "PRIVATE",
+                    65000, 10000, 0, "PENDING", "PARTIALLY_PAID", now,
+                    "Clean Claim Quality Metrics", "Ortho procedure submitted today via EDI 837."));
+
+            for (Claim c : todayClaims) {
+                Optional<Claim> opt = claimRepository.findByClaimId(c.getClaimId());
+                if (opt.isPresent()) {
+                    Claim ex = opt.get();
+                    ex.setClaimSubmittedDate(now);
+                    ex.setCreatedAt(now);
+                    ex.setPaidAmount(c.getPaidAmount());
+                    ex.setTotalBillAmount(c.getTotalBillAmount());
+                    ex.setClaimAmount(c.getClaimAmount());
+                    ex.setPendingAmount(c.getPendingAmount());
+                    ex.setDaysPending(0);
+                    ex.setStatus(c.getStatus());
+                    ex.setPaymentStatus(c.getPaymentStatus());
+                    billingPriorityService.calculateBillingPriority(ex);
+                    arAgingService.calculateArAging(ex);
+                    claimRepository.save(ex);
+                } else {
+                    billingPriorityService.calculateBillingPriority(c);
+                    arAgingService.calculateArAging(c);
+                    claimRepository.save(c);
+                }
+            }
+
+            // Also update CLM2059 and CLM2058 to today if they have pending balance
+            Optional<Claim> clm2059 = claimRepository.findByClaimId("CLM2059");
+            if (clm2059.isPresent() && clm2059.get().getPendingAmount() > 0) {
+                Claim c = clm2059.get();
+                c.setClaimSubmittedDate(now);
+                c.setCreatedAt(now);
+                c.setDaysPending(0);
+                arAgingService.calculateArAging(c);
+                claimRepository.save(c);
+            }
+            Optional<Claim> clm2058 = claimRepository.findByClaimId("CLM2058");
+            if (clm2058.isPresent() && clm2058.get().getPendingAmount() > 0) {
+                Claim c = clm2058.get();
+                c.setClaimSubmittedDate(now);
+                c.setCreatedAt(now);
+                c.setDaysPending(0);
+                arAgingService.calculateArAging(c);
+                claimRepository.save(c);
+            }
+
+            log.info("Successfully ensured claims for today ({})!", today);
+        }
+    }
+
+    private Claim buildCalendarClaim(String claimId, String patient, String ref, String payer, String type,
+                                     double totalBill, double paid, int daysPending,
+                                     String status, String payStatus, Instant submittedDate,
+                                     String reason, String rec) {
+        String companyId = "INS001";
+        String companyName = payer;
+        if (payer != null) {
+            String low = payer.toLowerCase();
+            if (low.contains("nova")) { companyId = "INS001"; companyName = "Nova Health Insurance"; }
+            else if (low.contains("care") || low.contains("shield")) { companyId = "INS002"; companyName = "CareShield Assurance"; }
+            else if (low.contains("medi") || low.contains("secure")) { companyId = "INS003"; companyName = "MediSecure Benefits"; }
+            else if (low.contains("prime") || low.contains("healthprime")) { companyId = "INS004"; companyName = "HealthPrime Plan"; }
+            else if (low.contains("unity")) { companyId = "INS005"; companyName = "Unity Payer Network"; }
+        }
+
+        List<String> reasons = new ArrayList<>();
+        List<String> recs = new ArrayList<>();
+        if (reason != null) reasons.add(reason);
+        if (rec != null) recs.add(rec);
+
+        return Claim.builder()
+                .claimId(claimId)
+                .patientName(patient)
+                .patientReference(ref)
+                .insuranceCompanyId(companyId)
+                .insuranceCompanyName(companyName)
+                .payerName(companyName)
+                .payerType(type)
+                .claimAmount(totalBill)
+                .totalBillAmount(totalBill)
+                .paidAmount(paid)
+                .pendingAmount(Math.max(0, totalBill - paid))
+                .daysPending(daysPending)
+                .eligibilityVerified(true)
+                .authorizationAvailable(true)
+                .codingComplete(true)
+                .documentationComplete(true)
+                .previousDenials(0)
+                .status(status)
+                .paymentStatus(payStatus)
+                .riskScore(15)
+                .riskLevel("LOW")
+                .predictedReason(reason)
+                .recommendation(rec)
+                .detectedReasons(reasons)
+                .recommendations(recs)
+                .claimSubmittedDate(submittedDate)
+                .createdAt(submittedDate)
+                .updatedAt(Instant.now())
+                .build();
     }
 
     private Claim buildPriorityClaim(String claimId, String patient, String ref, String payer, String type,
